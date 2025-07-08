@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}포트폴리오 비중 - 투자 포트폴리오 관리{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="fas fa-chart-pie me-2"></i>
+            포트폴리오 비중
+        </h1>
+    </div>
+</div>
+
+{% if allocation_data %}
+<div class="row">
+    <!-- 도넛 차트 -->
+    <div class="col-lg-8 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-pie me-2"></i>
+                    자산 배분 현황
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="position: relative; height: 400px;">
+                    <canvas id="allocationChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 비중 테이블 -->
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-list me-2"></i>
+                    종목별 비중
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>종목</th>
+                                <th>평가금액</th>
+                                <th>비중</th>
+                            </tr>
+                        </thead>
+                        <tbody id="allocation-table">
+                            <!-- JavaScript로 동적 생성 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 포트폴리오 요약 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-info-circle me-2"></i>
+                    포트폴리오 요약
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h6 class="text-muted">총 종목 수</h6>
+                            <h4 id="total-stocks">{{ allocation_data|length }}</h4>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h6 class="text-muted">총 평가금액</h6>
+                            <h4 id="total-value">-</h4>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h6 class="text-muted">최대 비중 종목</h6>
+                            <h4 id="max-allocation">-</h4>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h6 class="text-muted">분산 지수</h6>
+                            <h4 id="diversification">-</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="text-center py-5">
+                    <i class="fas fa-chart-pie fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">포트폴리오 데이터가 없습니다.</p>
+                    <a href="{{ url_for('main.holdings') }}" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>종목 추가하기
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const allocationData = {{ allocation_data|tojson }};
+
+if (allocationData && allocationData.length > 0) {
+    // 총 가치 계산
+    const totalValue = allocationData.reduce((sum, item) => sum + item.value, 0);
+    
+    // 차트 데이터 준비
+    const labels = allocationData.map(item => item.symbol);
+    const values = allocationData.map(item => item.value);
+    const percentages = allocationData.map(item => (item.value / totalValue * 100).toFixed(1));
+    
+    // 색상 팔레트
+    const colors = [
+        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+        '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
+    ];
+    
+    // 도넛 차트 생성
+    const ctx = document.getElementById('allocationChart').getContext('2d');
+    const allocationChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: values,
+                backgroundColor: colors.slice(0, allocationData.length),
+                borderColor: colors.slice(0, allocationData.length),
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed;
+                            const percentage = (value / totalValue * 100).toFixed(1);
+                            return label + ': $' + value.toFixed(2) + ' (' + percentage + '%)';
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    // 비중 테이블 생성
+    const tableBody = document.getElementById('allocation-table');
+    allocationData.forEach((item, index) => {
+        const percentage = (item.value / totalValue * 100).toFixed(1);
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>
+                <span class="d-inline-block rounded-circle me-2" 
+                      style="width: 12px; height: 12px; background-color: ${colors[index]}"></span>
+                <strong>${item.symbol}</strong>
+            </td>
+            <td>$${item.value.toFixed(2)}</td>
+            <td>${percentage}%</td>
+        `;
+        tableBody.appendChild(row);
+    });
+    
+    // 포트폴리오 요약 업데이트
+    document.getElementById('total-value').textContent = '$' + totalValue.toFixed(2);
+    
+    // 최대 비중 종목
+    const maxAllocation = allocationData.reduce((max, item) => 
+        item.value > max.value ? item : max
+    );
+    const maxPercentage = (maxAllocation.value / totalValue * 100).toFixed(1);
+    document.getElementById('max-allocation').textContent = maxAllocation.symbol + ' (' + maxPercentage + '%)';
+    
+    // 분산 지수 (허핀달 지수의 역수)
+    const herfindahlIndex = allocationData.reduce((sum, item) => {
+        const percentage = item.value / totalValue;
+        return sum + (percentage * percentage);
+    }, 0);
+    const diversificationIndex = (1 / herfindahlIndex).toFixed(1);
+    document.getElementById('diversification').textContent = diversificationIndex;
+}
+</script>
+{% endblock %}

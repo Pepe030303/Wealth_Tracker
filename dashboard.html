@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+
+{% block title %}대시보드 - 투자 포트폴리오 관리{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="fas fa-tachometer-alt me-2"></i>
+            대시보드
+        </h1>
+    </div>
+</div>
+
+<!-- 요약 카드 -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card bg-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">총 투자금액</h6>
+                        <h4 class="mb-0">${{ "%.2f"|format(total_investment) }}</h4>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-dollar-sign fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card bg-info">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">현재 가치</h6>
+                        <h4 class="mb-0">${{ "%.2f"|format(total_current_value) }}</h4>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-chart-line fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card {% if total_profit_loss >= 0 %}bg-success{% else %}bg-danger{% endif %}">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">손익</h6>
+                        <h4 class="mb-0">${{ "%.2f"|format(total_profit_loss) }}</h4>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas {% if total_profit_loss >= 0 %}fa-arrow-up{% else %}fa-arrow-down{% endif %} fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card {% if total_return_percent >= 0 %}bg-success{% else %}bg-danger{% endif %}">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">수익률</h6>
+                        <h4 class="mb-0">{{ "%.2f"|format(total_return_percent) }}%</h4>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-percentage fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 보유 종목 현황 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-wallet me-2"></i>
+                    보유 종목 현황
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if holdings_data %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>종목</th>
+                                    <th>현재가</th>
+                                    <th>전일대비</th>
+                                    <th>보유수량</th>
+                                    <th>평가금액</th>
+                                    <th>손익</th>
+                                    <th>수익률</th>
+                                </tr>
+                            </thead>
+                            <tbody id="holdings-table">
+                                {% for data in holdings_data %}
+                                <tr data-symbol="{{ data.holding.symbol }}">
+                                    <td>
+                                        <div class="stock-info">
+                                            {% set logo_url = data.holding.symbol | get_stock_logo_url %}
+                                            {% if logo_url %}
+                                                <img src="{{ logo_url }}" 
+                                                     alt="{{ data.holding.symbol }} logo" 
+                                                     class="stock-logo"
+                                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                                <div class="stock-logo placeholder" style="display: none;">
+                                                    {{ data.holding.symbol[:2] }}
+                                                </div>
+                                            {% else %}
+                                                <div class="stock-logo placeholder">
+                                                    {{ data.holding.symbol[:2] }}
+                                                </div>
+                                            {% endif %}
+                                            <div>
+                                                <div class="stock-symbol">{{ data.holding.symbol }}</div>
+                                                <div class="company-name">{{ data.holding.symbol | get_company_name }}</div>
+                                                <div class="dividend-months">
+                                                    {% set div_months = data.holding.symbol | get_dividend_months %}
+                                                    {% if div_months %}
+                                                        {% for month in div_months %}
+                                                            <span class="dividend-month">{{ month }}</span>
+                                                        {% endfor %}
+                                                    {% else %}
+                                                        <span class="dividend-month empty">No Div</span>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="current-price">
+                                        ${{ "%.2f"|format(data.current_price) }}
+                                    </td>
+                                    <td class="price-change">
+                                        <span class="{% if data.change >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                            {{ "%.2f"|format(data.change) }} ({{ "%.2f"|format(data.change_percent) }}%)
+                                        </span>
+                                    </td>
+                                    <td>{{ data.holding.quantity }}</td>
+                                    <td class="current-value">
+                                        ${{ "%.2f"|format(data.current_value) }}
+                                    </td>
+                                    <td class="profit-loss">
+                                        <span class="{% if data.profit_loss >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                            ${{ "%.2f"|format(data.profit_loss) }}
+                                        </span>
+                                    </td>
+                                    <td class="profit-loss-percent">
+                                        <span class="{% if data.profit_loss_percent >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                            {{ "%.2f"|format(data.profit_loss_percent) }}%
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">보유 종목이 없습니다.</p>
+                        <a href="{{ url_for('main.trades') }}" class="btn btn-primary">
+                            <i class="fas fa-exchange-alt me-1"></i>거래 기록 추가하기
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 월별 배당금 차트 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-coins me-2"></i>
+                    월별 배당금 ({{ "now"|strftime("%Y") }}년)
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="dividendChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 실시간 업데이트 버튼 -->
+<div class="position-fixed bottom-0 end-0 p-3">
+    <button id="refreshBtn" class="btn btn-secondary btn-sm" onclick="refreshPrices()">
+        <i id="refreshIcon" class="fas fa-sync-alt me-1"></i>
+        실시간 업데이트
+    </button>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 배당금 차트
+const dividendData = {{ dividend_data|tojson }};
+const ctx = document.getElementById('dividendChart').getContext('2d');
+
+const dividendChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'],
+        datasets: [{
+            label: '배당금 ($)',
+            data: dividendData,
+            backgroundColor: 'rgba(54, 162, 235, 0.6)',
+            borderColor: 'rgba(54, 162, 235, 1)',
+            borderWidth: 1
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: function(value) {
+                        return '$' + value.toFixed(2);
+                    }
+                }
+            }
+        }
+    }
+});
+
+// 실시간 가격 업데이트
+function refreshPrices() {
+    const refreshBtn = document.getElementById('refreshBtn');
+    const refreshIcon = document.getElementById('refreshIcon');
+    
+    refreshBtn.disabled = true;
+    refreshIcon.classList.add('fa-spin');
+    
+    fetch('/api/refresh-prices')
+        .then(response => response.json())
+        .then(data => {
+            updatePricesInTable(data);
+            setTimeout(() => {
+                refreshBtn.disabled = false;
+                refreshIcon.classList.remove('fa-spin');
+            }, 1000);
+        })
+        .catch(error => {
+            console.error('Error refreshing prices:', error);
+            refreshBtn.disabled = false;
+            refreshIcon.classList.remove('fa-spin');
+        });
+}
+
+function updatePricesInTable(pricesData) {
+    const rows = document.querySelectorAll('#holdings-table tr[data-symbol]');
+    
+    rows.forEach(row => {
+        const symbol = row.dataset.symbol;
+        const priceData = pricesData[symbol];
+        
+        if (priceData) {
+            // 현재가 업데이트
+            const currentPriceCell = row.querySelector('.current-price');
+            currentPriceCell.textContent = '$' + priceData.price.toFixed(2);
+            
+            // 전일대비 업데이트
+            const changeCell = row.querySelector('.price-change span');
+            const changeClass = priceData.change >= 0 ? 'text-success' : 'text-danger';
+            changeCell.className = changeClass;
+            changeCell.textContent = priceData.change.toFixed(2) + ' (' + priceData.change_percent.toFixed(2) + '%)';
+        }
+    });
+}
+
+// 자동 업데이트 (5분마다)
+setInterval(refreshPrices, 5 * 60 * 1000);
+</script>
+{% endblock %}

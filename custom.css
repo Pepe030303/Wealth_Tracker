@@ -1,0 +1,391 @@
+/* 커스텀 스타일 - Bootstrap 테마와 조화되도록 최소한의 스타일만 추가 */
+
+/* 차트 컨테이너 */
+.chart-container {
+    position: relative;
+    width: 100%;
+    height: 400px;
+}
+
+/* 실시간 업데이트 버튼 */
+.position-fixed.bottom-0.end-0 {
+    z-index: 1000;
+}
+
+/* 가격 변동 애니메이션 */
+.price-change-up {
+    animation: fadeInGreen 0.5s ease-in-out;
+}
+
+.price-change-down {
+    animation: fadeInRed 0.5s ease-in-out;
+}
+
+@keyframes fadeInGreen {
+    0% {
+        background-color: rgba(40, 167, 69, 0.3);
+    }
+    100% {
+        background-color: transparent;
+    }
+}
+
+@keyframes fadeInRed {
+    0% {
+        background-color: rgba(220, 53, 69, 0.3);
+    }
+    100% {
+        background-color: transparent;
+    }
+}
+
+/* 로딩 스피너 */
+.spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* 반응형 테이블 */
+.table-responsive {
+    border-radius: 0.375rem;
+}
+
+/* 카드 그림자 효과 */
+.card {
+    transition: box-shadow 0.15s ease-in-out;
+}
+
+.card:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+/* 네비게이션 활성 링크 */
+.navbar-nav .nav-link.active {
+    font-weight: 600;
+}
+
+/* 모달 최대 너비 */
+.modal-dialog {
+    max-width: 500px;
+}
+
+/* 토스트 컨테이너 */
+.toast-container {
+    z-index: 1060;
+}
+
+/* 빈 상태 아이콘 */
+.text-muted .fa-3x {
+    opacity: 0.5;
+}
+
+/* 수익/손실 색상 강조 */
+.text-success {
+    font-weight: 600;
+}
+
+.text-danger {
+    font-weight: 600;
+}
+
+/* 요약 카드 아이콘 */
+.card .fa-2x {
+    opacity: 0.8;
+}
+
+/* 차트 레전드 스타일 */
+.chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 1rem;
+}
+
+.chart-legend-item {
+    display: flex;
+    align-items: center;
+    margin: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+.chart-legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+}
+
+/* 작은 화면에서의 반응형 조정 */
+@media (max-width: 768px) {
+    .position-fixed.bottom-0.end-0 {
+        position: fixed !important;
+        bottom: 1rem !important;
+        right: 1rem !important;
+    }
+    
+    .chart-container {
+        height: 300px;
+    }
+    
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+    
+    .card-body {
+        padding: 1rem;
+    }
+}
+
+/* 다크 모드 호환성 */
+@media (prefers-color-scheme: dark) {
+    .chart-container canvas {
+        filter: brightness(0.9);
+    }
+}
+
+/* 인쇄 스타일 */
+@media print {
+    .position-fixed,
+    .navbar,
+    .modal,
+    .toast-container {
+        display: none !important;
+    }
+    
+    .card {
+        border: 1px solid #dee2e6 !important;
+        box-shadow: none !important;
+    }
+    
+    .table {
+        font-size: 0.75rem;
+    }
+}
+
+/* 접근성 향상 */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* 포커스 스타일 */
+.btn:focus,
+.form-control:focus,
+.nav-link:focus {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 2px;
+}
+
+/* 스크롤바 스타일 (웹킷 브라우저용) */
+.table-responsive::-webkit-scrollbar {
+    height: 8px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+    background: var(--bs-gray-200);
+    border-radius: 4px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+    background: var(--bs-gray-400);
+    border-radius: 4px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+    background: var(--bs-gray-500);
+}
+
+/* Enhanced Modern UI Styling */
+
+/* Enhanced Card Hover Effects */
+.card {
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Stock Logo Styling */
+.stock-logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-right: 0.75rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease;
+    flex-shrink: 0;
+}
+
+.stock-logo:hover {
+    transform: scale(1.1);
+}
+
+.stock-logo.placeholder {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: 0.75rem;
+}
+
+.stock-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.stock-symbol {
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.stock-company {
+    font-size: 0.875rem;
+    color: var(--bs-gray-600);
+}
+
+/* Dividend Month Pills */
+.dividend-months {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.25rem;
+}
+
+.dividend-month {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.dividend-month.empty {
+    background: var(--bs-gray-400);
+    color: var(--bs-gray-700);
+}
+
+/* Enhanced Table Styling */
+.table tbody tr:hover {
+    background-color: rgba(102, 126, 234, 0.05);
+}
+
+.table td {
+    vertical-align: middle;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* Enhanced Button Styling */
+.btn {
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-outline-primary {
+    border: 2px solid #667eea;
+    color: #667eea;
+}
+
+.btn-outline-primary:hover {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #667eea;
+}
+
+/* Enhanced Modal Styling */
+.modal-content {
+    border-radius: 15px;
+    border: none;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+.modal-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 15px 15px 0 0;
+    border: none;
+}
+
+/* Enhanced Form Styling */
+.form-control, .form-select {
+    border-radius: 8px;
+    border: 1px solid rgba(102, 126, 234, 0.3);
+    transition: all 0.3s ease;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+/* Enhanced Alert Styling */
+.alert {
+    border-radius: 10px;
+    border: none;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Enhanced Badge Styling */
+.badge {
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+/* Company Name Styling */
+.company-name {
+    font-size: 0.8rem;
+    color: var(--bs-gray-600);
+    font-weight: 400;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .stock-logo {
+        width: 24px;
+        height: 24px;
+        margin-right: 0.5rem;
+    }
+    
+    .dividend-month {
+        font-size: 0.6rem;
+        padding: 0.2rem 0.5rem;
+    }
+    
+    .stock-info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+    
+    .dividend-months {
+        margin-top: 0.1rem;
+    }
+}

@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}거래 기록 - 투자 포트폴리오 관리{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>
+                <i class="fas fa-exchange-alt me-2"></i>
+                거래 기록
+            </h1>
+            <div>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTradeModal">
+                    <i class="fas fa-plus me-1"></i>거래 추가
+                </button>
+                <a href="{{ url_for('main.recalculate_holdings_route') }}" class="btn btn-secondary">
+                    <i class="fas fa-calculator me-1"></i>보유종목 재계산
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 거래 요약 카드 -->
+{% if trade_summary %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-bar me-2"></i>
+                    종목별 거래 요약
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>종목</th>
+                                <th>총 매수</th>
+                                <th>총 매도</th>
+                                <th>순 보유</th>
+                                <th>평균단가</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for symbol, summary in trade_summary.items() %}
+                            <tr>
+                                <td>
+                                    <div class="stock-info">
+                                        {% set logo_url = symbol | get_stock_logo_url %}
+                                        {% if logo_url %}
+                                            <img src="{{ logo_url }}" 
+                                                 alt="{{ symbol }} logo" 
+                                                 class="stock-logo"
+                                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                            <div class="stock-logo placeholder" style="display: none;">
+                                                {{ symbol[:2] }}
+                                            </div>
+                                        {% else %}
+                                            <div class="stock-logo placeholder">
+                                                {{ symbol[:2] }}
+                                            </div>
+                                        {% endif %}
+                                        <div>
+                                            <div class="stock-symbol">{{ symbol }}</div>
+                                            <div class="company-name">{{ symbol | get_company_name }}</div>
+                                            <div class="dividend-months">
+                                                {% set div_months = symbol | get_dividend_months %}
+                                                {% if div_months %}
+                                                    {% for month in div_months %}
+                                                        <span class="dividend-month">{{ month }}</span>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    <span class="dividend-month empty">No Div</span>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="text-success">{{ summary.total_bought }}</td>
+                                <td class="text-danger">{{ summary.total_sold }}</td>
+                                <td class="{% if summary.net_quantity > 0 %}text-success{% elif summary.net_quantity < 0 %}text-danger{% else %}text-muted{% endif %}">
+                                    {{ summary.net_quantity }}
+                                </td>
+                                <td>
+                                    {% if summary.net_quantity > 0 and summary.total_cost > 0 %}
+                                        ${{ "%.2f"|format(summary.total_cost / summary.net_quantity) }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- 거래 기록 테이블 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-history me-2"></i>
+                    전체 거래 기록
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if trades %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>거래일</th>
+                                    <th>종목</th>
+                                    <th>구분</th>
+                                    <th>수량</th>
+                                    <th>가격</th>
+                                    <th>총액</th>
+                                    <th>작업</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for trade in trades %}
+                                <tr>
+                                    <td>{{ trade.trade_date.strftime('%Y-%m-%d') }}</td>
+                                    <td>
+                                        <div class="stock-info">
+                                            {% set logo_url = trade.symbol | get_stock_logo_url %}
+                                            {% if logo_url %}
+                                                <img src="{{ logo_url }}" 
+                                                     alt="{{ trade.symbol }} logo" 
+                                                     class="stock-logo"
+                                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                                <div class="stock-logo placeholder" style="display: none;">
+                                                    {{ trade.symbol[:2] }}
+                                                </div>
+                                            {% else %}
+                                                <div class="stock-logo placeholder">
+                                                    {{ trade.symbol[:2] }}
+                                                </div>
+                                            {% endif %}
+                                            <div>
+                                                <div class="stock-symbol">{{ trade.symbol }}</div>
+                                                <div class="company-name">{{ trade.symbol | get_company_name }}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if trade.trade_type == 'buy' %}bg-success{% else %}bg-danger{% endif %}">
+                                            {% if trade.trade_type == 'buy' %}매수{% else %}매도{% endif %}
+                                        </span>
+                                    </td>
+                                    <td>{{ trade.quantity }}</td>
+                                    <td>${{ "%.2f"|format(trade.price) }}</td>
+                                    <td class="{% if trade.trade_type == 'buy' %}text-danger{% else %}text-success{% endif %}">
+                                        {% if trade.trade_type == 'buy' %}-{% else %}+{% endif %}${{ "%.2f"|format(trade.quantity * trade.price) }}
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('main.delete_trade', trade_id=trade.id) }}" 
+                                           class="btn btn-sm btn-outline-danger"
+                                           onclick="return confirm('이 거래를 삭제하시겠습니까? 보유 종목이 재계산됩니다.')">
+                                            <i class="fas fa-trash"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-exchange-alt fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">거래 기록이 없습니다.</p>
+                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTradeModal">
+                            <i class="fas fa-plus me-1"></i>첫 번째 거래 추가하기
+                        </button>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 거래 추가 모달 -->
+<div class="modal fade" id="addTradeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus me-2"></i>
+                    거래 추가
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('main.add_trade') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="symbol" class="form-label">종목 심볼</label>
+                        <input type="text" class="form-control" id="symbol" name="symbol" 
+                               placeholder="예: AAPL, TSLA" required>
+                        <div class="form-text">미국 주식 심볼을 입력하세요.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="trade_type" class="form-label">거래 구분</label>
+                        <select class="form-select" id="trade_type" name="trade_type" required>
+                            <option value="">선택하세요</option>
+                            <option value="buy">매수 (Buy)</option>
+                            <option value="sell">매도 (Sell)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="quantity" class="form-label">수량</label>
+                        <input type="number" class="form-control" id="quantity" name="quantity" 
+                               min="1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="price" class="form-label">가격 ($)</label>
+                        <input type="number" class="form-control" id="price" name="price" 
+                               step="0.01" min="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="trade_date" class="form-label">거래일</label>
+                        <input type="date" class="form-control" id="trade_date" name="trade_date" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                    <button type="submit" class="btn btn-primary">추가</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 정보 알림 -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>안내:</strong> 거래 기록을 추가하면 보유 종목이 자동으로 계산됩니다. 
+            매도 시에는 충분한 보유 수량이 있는지 확인합니다 (FIFO 방식 적용).
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 종목 심볼 대문자 변환
+document.getElementById('symbol').addEventListener('input', function(e) {
+    e.target.value = e.target.value.toUpperCase();
+});
+
+// 오늘 날짜로 기본값 설정
+document.getElementById('trade_date').valueAsDate = new Date();
+
+// 거래 구분에 따른 색상 변경
+document.getElementById('trade_type').addEventListener('change', function(e) {
+    const modal = document.querySelector('#addTradeModal .modal-content');
+    if (e.target.value === 'buy') {
+        modal.style.borderLeft = '4px solid #28a745';
+    } else if (e.target.value === 'sell') {
+        modal.style.borderLeft = '4px solid #dc3545';
+    } else {
+        modal.style.borderLeft = 'none';
+    }
+});
+</script>
+{% endblock %}

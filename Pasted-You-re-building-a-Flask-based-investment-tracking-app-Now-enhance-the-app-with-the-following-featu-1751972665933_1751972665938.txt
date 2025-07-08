@@ -1,0 +1,64 @@
+You're building a Flask-based investment tracking app.
+
+Now enhance the app with the following features, mimicking spreadsheet logic used for tracking investment:
+
+---
+
+### 1. Holdings Based on Trade Log  
+- Create a `Trade` table:
+  - Fields: `id`, `symbol`, `trade_type` ('buy' or 'sell'), `quantity`, `price`, `date`
+- Add logic to compute **current holdings** based on trade history:
+  - Total quantity per symbol = sum of buys - sum of sells
+  - **Average buy price = (Σ(매수수량 × 매수가격)) / (총 보유 수량)**  
+    (Exclude sold shares from the average)
+
+---
+
+### 2. Dividend Data  
+- Add a `Dividend` table:
+  - Fields: `id`, `symbol`, `date`, `amount_per_share`
+- Based on current holdings, compute:
+  - **Expected Annual Dividend = amount_per_share × quantity × payout frequency**
+  - **Dividend Yield = (expected annual dividend) / (current market value of that stock)**
+- Add an optional `ex_dividend_date` (배당락일) field
+
+---
+
+### 3. Visualization  
+- Use Chart.js to create the following donut/pie charts:
+
+#### a. Portfolio Allocation (원형 그래프)
+  - Show percentage of each stock based on current market value  
+    (market_price × quantity / total portfolio value)
+
+#### b. Dividend Allocation (원형 그래프)
+  - Show expected annual dividend breakdown by stock
+
+#### c. Monthly Dividend Bar Chart
+  - Sum dividend records per month and display as a bar chart
+
+---
+
+### 4. UI Pages
+- `/dashboard`: show summary cards and charts
+- `/holdings`: show calculated holdings table
+- `/trades`: form to add/edit/delete trade records
+- `/dividends`: form to input per-share dividends and show expected income
+
+---
+
+### 5. Tech Details
+- Flask + SQLite
+- Jinja2 templates
+- Bootstrap for styling
+- Chart.js for charts
+- Alpha Vantage or Finnhub API for real-time price
+- Store API key in `.env` file
+
+Please include:
+- `models.py` for Trade and Dividend
+- `app.py` routes and logic
+- Template files for each page
+- Comments and simple mock data
+
+This app will help the user manually input trading and dividend info from their spreadsheet, and automatically compute average price, real-time portfolio allocation, and expected income.
