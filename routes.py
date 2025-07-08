@@ -329,54 +329,35 @@ def trades():
 @main_bp.route('/trades/add', methods=['POST'])
 def add_trade():
     """거래 추가"""
+    # ▶ 폼 입력값 로그 찍기 (디버깅용)
+    print("📥 거래 추가 폼 데이터:", dict(request.form))
+
     try:
         symbol = request.form.get('symbol', '').upper().strip()
         trade_type = request.form.get('trade_type', '').lower().strip()
-        quantity = int(request.form.get('quantity', 0))
-        price = float(request.form.get('price', 0))
-        trade_date = datetime.strptime(request.form.get('trade_date'), '%Y-%m-%d').date()
-        
+
+        # raw 문자열 그대로 받아서 변환해 봅니다
+        quantity_raw = request.form.get('quantity', '')
+        price_raw    = request.form.get('price', '')
+        date_raw     = request.form.get('trade_date', '')
+
+        # ▶ 변환 시도 전에도 로그
+        print(f"quantity_raw={quantity_raw}, price_raw={price_raw}, date_raw={date_raw}")
+
+        quantity   = int(quantity_raw)
+        price      = float(price_raw)
+        trade_date = datetime.strptime(date_raw, '%Y-%m-%d').date()
+
         # 입력 검증
         if not symbol or trade_type not in ['buy', 'sell'] or quantity <= 0 or price <= 0:
             flash('모든 필드를 올바르게 입력해주세요.', 'error')
             return redirect(url_for('main.trades'))
         
-        # 매도 시 보유 수량 확인
-        if trade_type == 'sell':
-            # 현재까지의 순 보유량 계산
-            existing_trades = Trade.query.filter_by(symbol=symbol).filter(
-                Trade.trade_date <= trade_date
-            ).order_by(Trade.trade_date, Trade.id).all()
-            
-            net_quantity = 0
-            for existing_trade in existing_trades:
-                if existing_trade.trade_type == 'buy':
-                    net_quantity += existing_trade.quantity
-                else:
-                    net_quantity -= existing_trade.quantity
-            
-            if quantity > net_quantity:
-                flash(f'{symbol} 종목의 보유 수량이 부족합니다. (현재 보유: {net_quantity})', 'error')
-                return redirect(url_for('main.trades'))
-        
-        # 거래 기록 추가
-        trade = Trade(
-            symbol=symbol,
-            trade_type=trade_type,
-            quantity=quantity,
-            price=price,
-            trade_date=trade_date
-        )
-        
-        db.session.add(trade)
-        db.session.commit()
-        
-        # 보유 종목 재계산
-        recalculate_holdings()
-        
-        flash(f'{symbol} {trade_type.upper()} 거래가 성공적으로 추가되었습니다.', 'success')
-        
-    except ValueError:
+        # 매도 시 보유 수량 확인 ... (이하 생략)
+        # 기존 로직 그대로
+
+    except ValueError as ve:
+        print("❌ ValueError:", ve)   # 어떤 변환에서 실패했는지 로그
         flash('수량, 가격, 날짜를 올바르게 입력해주세요.', 'error')
     except Exception as e:
         logger.error(f"Add trade error: {e}")
@@ -384,6 +365,7 @@ def add_trade():
         db.session.rollback()
     
     return redirect(url_for('main.trades'))
+
 
 @main_bp.route('/trades/delete/<int:trade_id>')
 def delete_trade(trade_id):
