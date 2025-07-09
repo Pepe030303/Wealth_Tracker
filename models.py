@@ -84,10 +84,15 @@ class StockPrice(db.Model):
     def __repr__(self):
         return f'<StockPrice {self.symbol}: ${self.current_price}>'
         
-class DividendCache(db.Model):
-    """배당금 캐시"""
-    symbol = db.Column(db.String(20), primary_key=True)
-    last_updated = db.Column(db.DateTime, default=datetime.utcnow)
+class DividendUpdateCache(db.Model):
+    """배당금 정보 업데이트 시점을 기록하는 캐시 테이블"""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    symbol = db.Column(db.String(20), nullable=False, index=True)
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 한 사용자는 같은 심볼을 한 번만 캐싱하도록 복합 고유 키 설정
+    __table_args__ = (db.UniqueConstraint('user_id', 'symbol', name='_user_symbol_uc'),)
     
 # --- 계산 함수 ---
 def recalculate_holdings(user_id):
