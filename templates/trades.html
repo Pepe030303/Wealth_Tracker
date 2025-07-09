@@ -85,13 +85,13 @@
                                 <td class="{% if summary.net_quantity > 0 %}text-success{% elif summary.net_quantity < 0 %}text-danger{% else %}text-muted{% endif %}">
                                     {{ summary.net_quantity }}
                                 </td>
-                                <td>
-                                    {% if summary.net_quantity > 0 and summary.total_cost > 0 %}
-                                        ${{ "%.2f"|format(summary.total_cost / summary.net_quantity) }}
-                                    {% else %}
-                                        -
-                                    {% endif %}
-                                </td>
+                                    <td>
+    {% if summary.net_quantity > 0 %}
+        ${{ "%.2f"|format(summary.avg_price) }}
+    {% else %}
+        -
+    {% endif %}
+</td>
                             </tr>
                             {% endfor %}
                         </tbody>
