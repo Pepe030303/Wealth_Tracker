@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}배당금 - 투자 포트폴리오 관리{% endblock %}
+{% block title %}배당금 분석 - Wealth Tracker{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -105,57 +105,22 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-plus me-2"></i>
-                    배당금 추가
-                </h5>
+                <h5 class="modal-title"><i class="fas fa-plus me-2"></i>배당금 추가</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="POST" action="{{ url_for('main.add_dividend') }}">
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="symbol" class="form-label">종목 심볼</label>
-                        <input type="text" class="form-control" id="symbol" name="symbol" 
-                               placeholder="예: AAPL, TSLA" required>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="amount" class="form-label">총 배당금액 ($)</label>
-                                <input type="number" class="form-control" id="amount" name="amount" 
-                                       step="0.01" min="0.01" required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="amount_per_share" class="form-label">주당 배당금 ($)</label>
-                                <input type="number" class="form-control" id="amount_per_share" name="amount_per_share" 
-                                       step="0.01" min="0.01" placeholder="선택사항">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="dividend_date" class="form-label">수령일</label>
-                                <input type="date" class="form-control" id="dividend_date" name="dividend_date" required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="ex_dividend_date" class="form-label">배당락일</label>
-                                <input type="date" class="form-control" id="ex_dividend_date" name="ex_dividend_date" placeholder="선택사항">
-                            </div>
-                        </div>
+                        <input type="text" class="form-control" id="symbol" name="symbol" placeholder="예: AAPL, O" required>
                     </div>
                     <div class="mb-3">
-                        <label for="payout_frequency" class="form-label">연간 배당 횟수</label>
-                        <select class="form-select" id="payout_frequency" name="payout_frequency">
-                            <option value="1">연 1회</option>
-                            <option value="2">반기별 (2회)</option>
-                            <option value="4" selected>분기별 (4회)</option>
-                            <option value="12">월별 (12회)</option>
-                        </select>
+                        <label for="amount" class="form-label">총 배당금액 ($)</label>
+                        <input type="number" class="form-control" id="amount" name="amount" step="0.01" min="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="dividend_date" class="form-label">수령일</label>
+                        <input type="date" class="form-control" id="dividend_date" name="dividend_date" required>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -167,150 +132,63 @@
     </div>
 </div>
 {% endblock %}
-{% endblock %}
 
 {% block scripts %}
 <script>
-// 1. 예상 월별 배당금 차트
-const expectedMonthlyData = {{ expected_monthly_data|tojson }};
-const expectedCtx = document.getElementById('expectedMonthlyDividendChart').getContext('2d');
-new Chart(expectedCtx, {
-    type: 'bar',
-    data: {
-        labels: ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'],
-        datasets: [{
-            label: '예상 배당금 ($)',
-            data: expectedMonthlyData,
-            backgroundColor: 'rgba(23, 162, 184, 0.6)',
-            borderColor: 'rgba(23, 162, 184, 1)',
-            borderWidth: 1
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                display: false
+document.addEventListener('DOMContentLoaded', function () {
+    // 1. 예상 월별 배당금 차트
+    const expectedMonthlyData = {{ expected_monthly_data|tojson }};
+    const expectedCtx = document.getElementById('expectedMonthlyDividendChart').getContext('2d');
+    if (expectedMonthlyData.some(d => d > 0)) {
+        new Chart(expectedCtx, {
+            type: 'bar',
+            data: {
+                labels: ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'],
+                datasets: [{
+                    label: '예상 배당금 ($)',
+                    data: expectedMonthlyData,
+                    backgroundColor: 'rgba(23, 162, 184, 0.6)',
+                    borderColor: 'rgba(23, 162, 184, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true } }
             }
-        },
-        scales: {
-            y: {
-                beginAtZero: true,
-                ticks: {
-                    callback: function(value) {
-                        return '$' + value.toFixed(2);
-                    }
-                }
-            }
-        }
+        });
     }
 
-});
-
-{% block scripts %}
-<script>
-// 배당금 차트
-const dividendData = {{ dividend_data|tojson }};
-const ctx = document.getElementById('dividendChart').getContext('2d');
-
-const dividendChart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-        labels: ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'],
-        datasets: [{
-            label: '배당금 ($)',
-            data: dividendData,
-            backgroundColor: 'rgba(40, 167, 69, 0.6)',
-            borderColor: 'rgba(40, 167, 69, 1)',
-            borderWidth: 1
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                display: false
+    // 2. 배당금 배분 차트
+    const allocationData = {{ allocation_data|tojson }};
+    const allocationCtx = document.getElementById('dividendAllocationChart').getContext('2d');
+    if (allocationData && allocationData.length > 0) {
+        new Chart(allocationCtx, {
+            type: 'doughnut',
+            data: {
+                labels: allocationData.map(item => item.symbol),
+                datasets: [{
+                    data: allocationData.map(item => item.expected_annual_dividend),
+                    backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } }
             }
-        },
-        scales: {
-            y: {
-                beginAtZero: true,
-                ticks: {
-                    callback: function(value) {
-                        return '$' + value.toFixed(2);
-                    }
-                }
-            }
-        }
+        });
+    } else {
+        allocationCtx.font = '16px sans-serif';
+        allocationCtx.textAlign = 'center';
+        allocationCtx.fillStyle = '#888';
+        allocationCtx.fillText('배당 데이터 없음', allocationCtx.canvas.width / 2, allocationCtx.canvas.height / 2);
     }
+
+    // 모달 내 오늘 날짜 기본값 설정
+    document.getElementById('dividend_date').valueAsDate = new Date();
 });
-
-// 2. 배당금 배분 차트 (기존과 동일)
-const allocationData = {{ allocation_data|tojson }};
-const allocationCtx = document.getElementById('dividendAllocationChart').getContext('2d');
-if (allocationData && allocationData.length > 0) {
-    new Chart(allocationCtx, {
-        type: 'doughnut',
-        data: {
-            labels: allocationData.map(item => item.symbol),
-            datasets: [{
-                data: allocationData.map(item => item.expected_annual_dividend),
-                backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40']
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: {
-                        generateLabels: function(chart) {
-                            const data = chart.data;
-                            if (data.labels.length && data.datasets.length) {
-                                return data.labels.map(function(label, i) {
-                                    const value = data.datasets[0].data[i];
-                                    return {
-                                        text: label + ': $' + value.toFixed(2),
-                                        fillStyle: data.datasets[0].backgroundColor[i],
-                                        strokeStyle: data.datasets[0].backgroundColor[i],
-                                        lineWidth: 0,
-                                        index: i
-                                    };
-                                });
-                            }
-                            return [];
-                        }
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const value = context.parsed;
-                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                            const percentage = ((value / total) * 100).toFixed(1);
-                            return context.label + ': $' + value.toFixed(2) + ' (' + percentage + '%)';
-                        }
-                    }
-                }
-            }
-        }
-    });
-} else {
-    allocationCtx.fillStyle = '#6c757d';
-    allocationCtx.font = '16px Arial';
-    allocationCtx.textAlign = 'center';
-    allocationCtx.fillText('배당 데이터가 없습니다', allocationCtx.canvas.width / 2, allocationCtx.canvas.height / 2);
-}
-
-// 종목 심볼 대문자 변환
-document.getElementById('symbol').addEventListener('input', function(e) {
-    e.target.value = e.target.value.toUpperCase();
-});
-
-// 오늘 날짜로 기본값 설정
-document.getElementById('dividend_date').valueAsDate = new Date();
 </script>
 {% endblock %}
