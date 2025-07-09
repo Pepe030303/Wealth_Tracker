@@ -4,104 +4,81 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}투자 포트폴리오 관리{% endblock %}</title>
-    
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
-    
-    <!-- Font Awesome for icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    
-    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
-    <!-- Custom CSS -->
     <link href="{{ url_for('static', filename='css/custom.css') }}" rel="stylesheet">
 </head>
-<body>
-    <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top shadow-lg">
+<body class="d-flex flex-column min-vh-100">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top shadow-sm">
         <div class="container">
-            <a class="navbar-brand fw-bold" href="{{ url_for('main.dashboard') }}">
+            <a class="navbar-brand fw-bold" href="{{ url_for('main.dashboard') if current_user.is_authenticated else url_for('main.login') }}">
                 <i class="fas fa-chart-line me-2 text-primary"></i>
-                투자 포트폴리오
+                Wealth Tracker
             </a>
-            
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
-            
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'main.dashboard' %}active border-bottom border-2 border-primary{% endif %} px-3 py-2" 
-                           href="{{ url_for('main.dashboard') }}">
-                            <i class="fas fa-tachometer-alt me-1"></i>대시보드
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'main.trades' %}active border-bottom border-2 border-primary{% endif %} px-3 py-2" 
-                           href="{{ url_for('main.trades') }}">
-                            <i class="fas fa-exchange-alt me-1"></i>거래 기록
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'main.holdings' %}active border-bottom border-2 border-primary{% endif %} px-3 py-2" 
-                           href="{{ url_for('main.holdings') }}">
-                            <i class="fas fa-wallet me-1"></i>보유 종목
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'main.dividends' %}active border-bottom border-2 border-primary{% endif %} px-3 py-2" 
-                           href="{{ url_for('main.dividends') }}">
-                            <i class="fas fa-coins me-1"></i>배당금
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'main.allocation' %}active border-bottom border-2 border-primary{% endif %} px-3 py-2" 
-                           href="{{ url_for('main.allocation') }}">
-                            <i class="fas fa-chart-pie me-1"></i>포트폴리오 비중
-                        </a>
-                    </li>
+                    {% if current_user.is_authenticated %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'main.dashboard' %}active{% endif %}" href="{{ url_for('main.dashboard') }}"><i class="fas fa-tachometer-alt me-1"></i>대시보드</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'main.trades' %}active{% endif %}" href="{{ url_for('main.trades') }}"><i class="fas fa-exchange-alt me-1"></i>거래 기록</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'main.holdings' %}active{% endif %}" href="{{ url_for('main.holdings') }}"><i class="fas fa-wallet me-1"></i>보유 종목</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'main.dividends' %}active{% endif %}" href="{{ url_for('main.dividends') }}"><i class="fas fa-coins me-1"></i>배당금</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'main.allocation' %}active{% endif %}" href="{{ url_for('main.allocation') }}"><i class="fas fa-chart-pie me-1"></i>포트폴리오</a>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-user me-1"></i>{{ current_user.username }}
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
+                                <li><a class="dropdown-item" href="{{ url_for('main.logout') }}">로그아웃</a></li>
+                            </ul>
+                        </li>
+                    {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'main.login' %}active{% endif %}" href="{{ url_for('main.login') }}">로그인</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'main.signup' %}active{% endif %}" href="{{ url_for('main.signup') }}">회원가입</a>
+                        </li>
+                    {% endif %}
                 </ul>
             </div>
         </div>
     </nav>
 
-    <!-- Main Content -->
-    <div class="main-content pt-4">
-        <!-- Flash Messages -->
+    <main class="container my-4 flex-grow-1">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-                <div class="container mt-3">
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show shadow-sm" role="alert">
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    {% endfor %}
-                </div>
-        {% endif %}
-    {% endwith %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </main>
 
-        <!-- Page Content -->
-        <main class="container mt-4">
-            {% block content %}{% endblock %}
-        </main>
-    </div>
-
-    <!-- Footer -->
-    <footer class="bg-dark text-light mt-5 py-4">
+    <footer class="bg-dark text-white-50 mt-auto py-3">
         <div class="container text-center">
-            <p>&copy; 2025 투자 포트폴리오 관리 시스템. 모든 권리 보유.</p>
+            <small>© 2024 Wealth Tracker. All Rights Reserved.</small>
         </div>
     </footer>
 
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- Custom JS -->
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
