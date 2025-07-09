@@ -140,26 +140,25 @@ def holdings():
     return render_template('holdings.html', holdings_data=holdings_data)
 
 
+# /trades 라우트 함수 수정
 @main_bp.route('/trades')
 @login_required
 def trades():
+    # 현재 사용자의 거래 기록을 가져옵니다.
     trades = Trade.query.filter_by(user_id=current_user.id).order_by(Trade.trade_date.desc(), Trade.id.desc()).all()
     
+    # 현재 사용자의 보유 종목을 가져와 요약 정보를 만듭니다.
+    holdings = Holding.query.filter_by(user_id=current_user.id).all()
+    
     trade_summary = {}
-    all_user_trades = Trade.query.filter_by(user_id=current_user.id).all()
-    symbols = {t.symbol for t in all_user_trades}
-
-    for symbol in symbols:
-        recalculate_holdings(current_user.id) # 보유량 다시 계산
-        holding = Holding.query.filter_by(user_id=current_user.id, symbol=symbol).first()
-        if holding:
-             trade_summary[symbol] = {
-                 'net_quantity': holding.quantity,
-                 'avg_price': holding.purchase_price
-             }
+    for holding in holdings:
+        trade_summary[holding.symbol] = {
+            'net_quantity': holding.quantity,
+            'avg_price': holding.purchase_price
+        }
 
     return render_template('trades.html', trades=trades, trade_summary=trade_summary)
-
+    
 @main_bp.route('/trades/add', methods=['POST'])
 @login_required
 def add_trade():
