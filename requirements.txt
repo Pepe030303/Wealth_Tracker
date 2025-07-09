@@ -6,3 +6,4 @@ gunicorn
 mysql-connector-python
 yfinance  # <-- 추가
 pandas    # <-- 추가
+mysql-connector-python
