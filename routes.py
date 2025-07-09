@@ -232,7 +232,74 @@ def delete_dividend(dividend_id):
         db.session.rollback()
     
     return redirect(url_for('main.dividends'))
+@main_bp.route('/dividends/auto-update')
+def auto_update_dividends():
+    """
+    보유 중인 모든 주식의 배당금 내역을 yfinance를 통해 자동으로 가져와 DB에 추가합니다.
+    """
+    try:
+        # 1. 현재 보유 중인 모든 종목을 DB에서 가져옵니다.
+        holdings = Holding.query.all()
+        if not holdings:
+            flash('보유 종목이 없습니다. 먼저 거래 기록을 추가해주세요.', 'info')
+            return redirect(url_for('main.dividends'))
 
+        new_dividend_count = 0
+        
+        # 2. 각 보유 종목에 대해 반복합니다.
+        for holding in holdings:
+            try:
+                ticker = yf.Ticker(holding.symbol)
+                
+                # yfinance에서 과거 배당금 내역 전체를 가져옵니다. (Pandas Series)
+                # 인덱스는 지급일(PayDate), 값은 주당배당금(Dividend) 입니다.
+                hist_dividends = ticker.dividends
+                
+                if hist_dividends.empty:
+                    logger.info(f"'{holding.symbol}'에 대한 배당금 정보가 없습니다.")
+                    continue
+
+                # 3. 각 배당금 지급 내역에 대해 반복합니다.
+                for pay_date, amount_per_share in hist_dividends.items():
+                    # Pandas Timestamp를 Python date 객체로 변환합니다.
+                    pay_date_obj = pay_date.date()
+
+                    # 4. DB에 동일한 종목, 동일한 지급일의 배당금이 이미 있는지 확인 (중복 방지)
+                    exists = Dividend.query.filter_by(symbol=holding.symbol, dividend_date=pay_date_obj).first()
+                    
+                    if not exists:
+                        # 5. 새로운 배당금이라면, 총 배당금을 계산하여 DB에 추가합니다.
+                        total_amount = amount_per_share * holding.quantity
+                        
+                        new_dividend = Dividend(
+                            symbol=holding.symbol,
+                            amount=total_amount,
+                            amount_per_share=amount_per_share,
+                            dividend_date=pay_date_obj,
+                            payout_frequency=4  # 기본값으로 분기(4회) 설정
+                        )
+                        db.session.add(new_dividend)
+                        new_dividend_count += 1
+                        logger.info(f"'{holding.symbol}'의 새로운 배당금 추가: {pay_date_obj}")
+
+            except Exception as e:
+                logger.error(f"'{holding.symbol}' 처리 중 오류 발생: {e}")
+                continue # 한 종목에서 오류가 나도 다음 종목은 계속 처리
+
+        # 6. 변경사항을 DB에 최종 커밋합니다.
+        if new_dividend_count > 0:
+            db.session.commit()
+            flash(f'{new_dividend_count}개의 새로운 배당금 내역을 자동으로 추가했습니다.', 'success')
+        else:
+            flash('업데이트할 새로운 배당금 내역이 없습니다.', 'info')
+
+    except Exception as e:
+        db.session.rollback() # 전체 프로세스에서 문제 발생 시 롤백
+        logger.error(f"배당금 자동 업데이트 중 심각한 오류 발생: {e}")
+        flash('배당금 자동 업데이트 중 오류가 발생했습니다. 로그를 확인해주세요.', 'error')
+
+    return redirect(url_for('main.dividends'))
+    
 @main_bp.route('/allocation')
 def allocation():
     """포트폴리오 비중 페이지"""
