@@ -247,25 +247,17 @@ const dividendChart = new Chart(ctx, {
     }
 });
 
-// 배당금 배분 차트
+// 2. 배당금 배분 차트 (기존과 동일)
 const allocationData = {{ allocation_data|tojson }};
 const allocationCtx = document.getElementById('dividendAllocationChart').getContext('2d');
-
 if (allocationData && allocationData.length > 0) {
-    const allocationChart = new Chart(allocationCtx, {
+    new Chart(allocationCtx, {
         type: 'doughnut',
         data: {
             labels: allocationData.map(item => item.symbol),
             datasets: [{
                 data: allocationData.map(item => item.expected_annual_dividend),
-                backgroundColor: [
-                    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
-                    '#FF9F40', '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'
-                ],
-                hoverBackgroundColor: [
-                    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
-                    '#FF9F40', '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'
-                ]
+                backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40']
             }]
         },
         options: {
