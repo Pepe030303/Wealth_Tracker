@@ -4,3 +4,5 @@ python-dotenv
 requests
 gunicorn
 mysql-connector-python
+yfinance  # <-- 추가
+pandas    # <-- 추가
