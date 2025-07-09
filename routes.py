@@ -9,7 +9,8 @@ from stock_api import stock_api
 from flask_login import login_user, logout_user, current_user, login_required
 import logging
 import yfinance as yf
-from datetime import datetime
+from datetime import datetime, timedelta
+from models import DividendUpdateCache 
 
 logger = logging.getLogger(__name__)
 main_bp = Blueprint('main', __name__)
@@ -191,66 +192,85 @@ def recalculate_holdings_route():
 @main_bp.route('/dividends')
 @login_required
 def dividends():
-    # --- 자동 업데이트 로직 시작 ---
+    # --- 자동 업데이트 로직 (최적화 버전) ---
     try:
-        # 1. 현재 보유 중인 모든 종목을 DB에서 가져옵니다.
         holdings = Holding.query.filter_by(user_id=current_user.id).all()
-        new_dividend_count = 0
         
-        # 2. 각 보유 종목에 대해 반복합니다.
-        for holding in holdings:
-            try:
-                ticker = yf.Ticker(holding.symbol)
-                hist_dividends = ticker.dividends
-                
-                if hist_dividends.empty:
-                    continue
+        if holdings:
+            newly_added_dividends = []
+            symbols_to_update_cache = set()
 
-                # 3. 각 배당금 지급 내역에 대해 반복합니다.
-                for pay_date, amount_per_share in hist_dividends.items():
-                    pay_date_obj = pay_date.date()
+            for holding in holdings:
+                try:
+                    # 1. 캐시 확인: 이 종목을 마지막으로 업데이트한 지 24시간이 지났는지 확인
+                    cache_entry = DividendUpdateCache.query.filter_by(
+                        user_id=current_user.id, 
+                        symbol=holding.symbol
+                    ).first()
                     
-                    # 구매일 이후의 배당금만 추가하는 조건 (중요)
-                    # holding.purchase_date가 None이 아닌지 확인
-                    if holding.purchase_date and pay_date_obj > holding.purchase_date.date():
-                        # 4. DB에 중복 데이터가 있는지 확인
-                        exists = Dividend.query.filter_by(
-                            symbol=holding.symbol, 
-                            dividend_date=pay_date_obj, 
-                            user_id=current_user.id
-                        ).first()
+                    # 캐시가 존재하고, 24시간이 지나지 않았으면 API 호출 건너뛰기
+                    if cache_entry and (datetime.utcnow() - cache_entry.last_updated) < timedelta(hours=24):
+                        continue
+
+                    # 2. yfinance API 호출 (필요한 경우에만)
+                    ticker = yf.Ticker(holding.symbol)
+                    hist_dividends = ticker.dividends
+                    
+                    if hist_dividends.empty:
+                        symbols_to_update_cache.add(holding.symbol) # 배당 없는 종목도 캐시 시간 갱신
+                        continue
+
+                    # 3. DB 쿼리 최소화: 기존 배당금 날짜를 한 번에 메모리로 로드
+                    existing_dividend_dates = {
+                        d.dividend_date for d in Dividend.query.with_entities(Dividend.dividend_date).filter_by(
+                            user_id=current_user.id,
+                            symbol=holding.symbol
+                        ).all()
+                    }
+
+                    # 4. 루프 내에서는 DB 쿼리 없이 Python Set으로 중복 확인
+                    for pay_date, amount_per_share in hist_dividends.items():
+                        pay_date_obj = pay_date.date()
                         
-                        if not exists:
-                            # 5. 새로운 배당금이라면 DB에 추가
-                            new_dividend = Dividend(
+                        # 구매일 이후이고, 중복되지 않은 배당금만 처리
+                        if (holding.purchase_date and pay_date_obj > holding.purchase_date.date() 
+                                and pay_date_obj not in existing_dividend_dates):
+                            
+                            new_dividend_obj = Dividend(
                                 symbol=holding.symbol,
                                 amount=amount_per_share * holding.quantity,
                                 amount_per_share=amount_per_share,
                                 dividend_date=pay_date_obj,
-                                payout_frequency=4,
                                 user_id=current_user.id
                             )
-                            db.session.add(new_dividend)
-                            new_dividend_count += 1
+                            newly_added_dividends.append(new_dividend_obj)
+                    
+                    symbols_to_update_cache.add(holding.symbol)
 
-            except Exception as e:
-                # 개별 종목 오류는 로깅만 하고 계속 진행
-                logger.error(f"'{holding.symbol}' 배당금 정보 처리 중 오류 발생: {e}")
-                continue
-        
-        # 6. 새로운 배당금이 있으면 DB에 최종 커밋
-        if new_dividend_count > 0:
+                except Exception as e:
+                    logger.error(f"'{holding.symbol}' 배당금 정보 처리 중 오류: {e}")
+
+            # 5. DB 작업 일괄 처리
+            if newly_added_dividends:
+                db.session.bulk_save_objects(newly_added_dividends)
+                flash(f'{len(newly_added_dividends)}개의 새로운 배당금 내역을 동기화했습니다.', 'success')
+
+            # 6. 캐시 시간 갱신
+            for symbol in symbols_to_update_cache:
+                cache = DividendUpdateCache.query.filter_by(user_id=current_user.id, symbol=symbol).first()
+                if cache:
+                    cache.last_updated = datetime.utcnow()
+                else:
+                    db.session.add(DividendUpdateCache(user_id=current_user.id, symbol=symbol))
+            
+            # 모든 변경사항 한번에 커밋
             db.session.commit()
-            # 사용자에게 피드백을 줍니다.
-            flash(f'{new_dividend_count}개의 새로운 배당금 내역을 자동으로 동기화했습니다.', 'success')
-        
+
     except Exception as e:
         db.session.rollback()
-        logger.error(f"배당금 자동 업데이트 중 심각한 오류 발생: {e}")
-        # flash('배당금 동기화 중 오류가 발생했습니다.', 'error') # 에러를 사용자에게 직접 보여주면 혼란스러울 수 있음
+        logger.error(f"배당금 동기화 과정에서 심각한 오류 발생: {e}")
 
-    # --- 기존 배당금 페이지 표시 로직 ---
-    # 이제 업데이트된 최신 데이터를 조회합니다.
+    # --- 기존 배당금 페이지 표시 로직 (변경 없음) ---
     dividends_list = Dividend.query.filter_by(user_id=current_user.id).order_by(Dividend.dividend_date.desc()).all()
     dividend_metrics = calculate_dividend_metrics(current_user.id)
     allocation_data = get_dividend_allocation_data(current_user.id)
@@ -266,13 +286,15 @@ def dividends():
     
     dividend_data = [0] * 12
     for month, total in monthly_dividends_query:
-        dividend_data[int(month) - 1] = float(total)
+        if month is not None:
+            dividend_data[int(month) - 1] = float(total)
 
     return render_template('dividends.html', 
                              dividends=dividends_list, 
                              dividend_data=dividend_data,
                              dividend_metrics=dividend_metrics,
                              allocation_data=allocation_data)
+    
 @main_bp.route('/dividends/add', methods=['POST'])
 @login_required
 def add_dividend():
