@@ -83,7 +83,12 @@ class StockPrice(db.Model):
 
     def __repr__(self):
         return f'<StockPrice {self.symbol}: ${self.current_price}>'
-
+        
+class DividendCache(db.Model):
+    """배당금 캐시"""
+    symbol = db.Column(db.String(20), primary_key=True)
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow)
+    
 # --- 계산 함수 ---
 def recalculate_holdings(user_id):
     Holding.query.filter_by(user_id=user_id).delete()
