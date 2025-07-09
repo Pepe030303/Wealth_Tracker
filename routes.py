@@ -9,6 +9,7 @@ from stock_api import stock_api
 from flask_login import login_user, logout_user, current_user, login_required
 import logging
 import yfinance as yf
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 main_bp = Blueprint('main', __name__)
@@ -190,15 +191,88 @@ def recalculate_holdings_route():
 @main_bp.route('/dividends')
 @login_required
 def dividends():
+    # --- 자동 업데이트 로직 시작 ---
+    try:
+        # 1. 현재 보유 중인 모든 종목을 DB에서 가져옵니다.
+        holdings = Holding.query.filter_by(user_id=current_user.id).all()
+        new_dividend_count = 0
+        
+        # 2. 각 보유 종목에 대해 반복합니다.
+        for holding in holdings:
+            try:
+                ticker = yf.Ticker(holding.symbol)
+                hist_dividends = ticker.dividends
+                
+                if hist_dividends.empty:
+                    continue
+
+                # 3. 각 배당금 지급 내역에 대해 반복합니다.
+                for pay_date, amount_per_share in hist_dividends.items():
+                    pay_date_obj = pay_date.date()
+                    
+                    # 구매일 이후의 배당금만 추가하는 조건 (중요)
+                    # holding.purchase_date가 None이 아닌지 확인
+                    if holding.purchase_date and pay_date_obj > holding.purchase_date.date():
+                        # 4. DB에 중복 데이터가 있는지 확인
+                        exists = Dividend.query.filter_by(
+                            symbol=holding.symbol, 
+                            dividend_date=pay_date_obj, 
+                            user_id=current_user.id
+                        ).first()
+                        
+                        if not exists:
+                            # 5. 새로운 배당금이라면 DB에 추가
+                            new_dividend = Dividend(
+                                symbol=holding.symbol,
+                                amount=amount_per_share * holding.quantity,
+                                amount_per_share=amount_per_share,
+                                dividend_date=pay_date_obj,
+                                payout_frequency=4,
+                                user_id=current_user.id
+                            )
+                            db.session.add(new_dividend)
+                            new_dividend_count += 1
+
+            except Exception as e:
+                # 개별 종목 오류는 로깅만 하고 계속 진행
+                logger.error(f"'{holding.symbol}' 배당금 정보 처리 중 오류 발생: {e}")
+                continue
+        
+        # 6. 새로운 배당금이 있으면 DB에 최종 커밋
+        if new_dividend_count > 0:
+            db.session.commit()
+            # 사용자에게 피드백을 줍니다.
+            flash(f'{new_dividend_count}개의 새로운 배당금 내역을 자동으로 동기화했습니다.', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"배당금 자동 업데이트 중 심각한 오류 발생: {e}")
+        # flash('배당금 동기화 중 오류가 발생했습니다.', 'error') # 에러를 사용자에게 직접 보여주면 혼란스러울 수 있음
+
+    # --- 기존 배당금 페이지 표시 로직 ---
+    # 이제 업데이트된 최신 데이터를 조회합니다.
     dividends_list = Dividend.query.filter_by(user_id=current_user.id).order_by(Dividend.dividend_date.desc()).all()
     dividend_metrics = calculate_dividend_metrics(current_user.id)
     allocation_data = get_dividend_allocation_data(current_user.id)
-    cy = datetime.now().year
-    monthly_dividends_q = db.session.query(extract('month', Dividend.dividend_date), func.sum(Dividend.amount)).filter(Dividend.user_id == current_user.id, extract('year', Dividend.dividend_date) == cy).group_by(extract('month', Dividend.dividend_date)).all()
-    dividend_data = [0]*12
-    for m, t in monthly_dividends_q: dividend_data[m-1] = float(t)
-    return render_template('dividends.html', dividends=dividends_list, dividend_data=dividend_data, dividend_metrics=dividend_metrics, allocation_data=allocation_data)
+    
+    current_year = datetime.now().year
+    monthly_dividends_query = db.session.query(
+        extract('month', Dividend.dividend_date).label('month'),
+        func.sum(Dividend.amount).label('total')
+    ).filter(
+        Dividend.user_id == current_user.id,
+        extract('year', Dividend.dividend_date) == current_year
+    ).group_by(extract('month', Dividend.dividend_date)).all()
+    
+    dividend_data = [0] * 12
+    for month, total in monthly_dividends_query:
+        dividend_data[int(month) - 1] = float(total)
 
+    return render_template('dividends.html', 
+                             dividends=dividends_list, 
+                             dividend_data=dividend_data,
+                             dividend_metrics=dividend_metrics,
+                             allocation_data=allocation_data)
 @main_bp.route('/dividends/add', methods=['POST'])
 @login_required
 def add_dividend():
