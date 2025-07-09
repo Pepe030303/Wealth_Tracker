@@ -81,7 +81,7 @@ def signup():
             return redirect(url_for('main.login'))
     return render_template('signup.html')
 
-@# --- 대시보드 라우트 (UI 개선을 위해 평단가 추가) ---
+# --- 대시보드 라우트 (UI 개선을 위해 평단가 추가) ---
 @main_bp.route('/')
 @login_required
 def dashboard():
