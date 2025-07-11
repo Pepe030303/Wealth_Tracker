@@ -1,4 +1,3 @@
-
 # routes.py
 
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
@@ -51,7 +50,6 @@ def signup():
 def dashboard():
     holdings = Holding.query.filter_by(user_id=current_user.id).all()
     dividend_metrics = calculate_dividend_metrics(current_user.id)
-
     if not holdings:
         return render_template('dashboard.html', summary={}, sector_allocation=[], monthly_dividend_data={'labels': [], 'data': []})
 
@@ -96,23 +94,17 @@ def holdings():
     holdings = Holding.query.filter_by(user_id=current_user.id).order_by(Holding.symbol).all()
     if not holdings:
         return render_template('holdings.html', holdings_data=[])
-        
     symbols = {h.symbol for h in holdings}
     price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
     profile_data_map = {s: stock_api.get_stock_profile(s) for s in symbols}
-
     holdings_data = []
     for h in holdings:
         price_data = price_data_map.get(h.symbol)
         profile_data = profile_data_map.get(h.symbol)
-        
         current_price = price_data['price'] if price_data and price_data.get('price') is not None else h.purchase_price
         current_value = h.quantity * current_price
-        
         holdings_data.append({
-            'holding': h,
-            'logo': None, # EDGAR API는 로고를 제공하지 않으므로 None으로 고정
-            'current_price': current_price,
+            'holding': h, 'logo': None, 'current_price': current_price,
             'profit_loss': current_value - (h.quantity * h.purchase_price),
             'profit_loss_percent': (current_value - (h.quantity * h.purchase_price)) / (h.quantity * h.purchase_price) * 100 if h.purchase_price > 0 else 0,
         })
@@ -123,21 +115,15 @@ def holdings():
 def trades():
     trades = Trade.query.filter_by(user_id=current_user.id).order_by(Trade.trade_date.desc(), Trade.id.desc()).all()
     holdings = Holding.query.filter_by(user_id=current_user.id).all()
-    
-    # 거래 요약 정보 계산 로직 수정
     trade_summary = {}
     for holding in holdings:
-        # 각 보유 종목에 대한 매수/매도 기록을 조회하여 계산
         buy_trades = Trade.query.filter_by(user_id=current_user.id, symbol=holding.symbol, trade_type='buy').all()
         sell_trades = Trade.query.filter_by(user_id=current_user.id, symbol=holding.symbol, trade_type='sell').all()
-        
         trade_summary[holding.symbol] = {
-            'net_quantity': holding.quantity,
-            'avg_price': holding.purchase_price,
+            'net_quantity': holding.quantity, 'avg_price': holding.purchase_price,
             'total_bought': sum(t.quantity for t in buy_trades),
             'total_sold': sum(t.quantity for t in sell_trades)
         }
-        
     return render_template('trades.html', trades=trades, trade_summary=trade_summary)
 
 @main_bp.route('/trades/add', methods=['POST'])
@@ -145,9 +131,7 @@ def trades():
 def add_trade():
     symbol = request.form.get('symbol', '').upper().strip()
     try:
-        trade_type = request.form.get('trade_type')
-        quantity = float(request.form.get('quantity'))
-        price = float(request.form.get('price'))
+        trade_type, quantity, price = request.form.get('trade_type'), float(request.form.get('quantity')), float(request.form.get('price'))
         trade_date = datetime.strptime(request.form.get('trade_date'), '%Y-%m-%d').date()
         if not all([symbol, trade_type, quantity > 0, price > 0]): raise ValueError("모든 필드를 올바르게 입력해주세요.")
         if trade_type == 'sell':
@@ -173,16 +157,14 @@ def delete_trade(trade_id):
     recalculate_holdings(current_user.id)
     flash(f'{trade.symbol} 거래가 삭제되었습니다.', 'success')
     return redirect(url_for('main.trades'))
-    
+
 @main_bp.route('/dividends')
 @login_required
 def dividends():
     if task_queue:
         task_queue.enqueue(update_all_dividends_for_user, current_user.id, job_timeout='10m')
-    
     dividend_metrics = calculate_dividend_metrics(current_user.id)
     allocation_data = get_dividend_allocation_data(dividend_metrics)
-    
     monthly_totals = [0] * 12
     month_map = {'Jan':0, 'Feb':1, 'Mar':2, 'Apr':3, 'May':4, 'Jun':5, 'Jul':6, 'Aug':7, 'Sep':8, 'Oct':9, 'Nov':10, 'Dec':11}
     for symbol, metrics in dividend_metrics.items():
@@ -192,11 +174,8 @@ def dividends():
             for month_str in payout_months:
                 if month_str in month_map:
                     monthly_totals[month_map[month_str]] += monthly_amount
-    
     monthly_dividend_data = {'labels': [f"{i+1}월" for i in range(12)], 'data': monthly_totals}
-
     return render_template('dividends.html', dividend_metrics=dividend_metrics, allocation_data=allocation_data, monthly_dividend_data=monthly_dividend_data)
-
 
 @main_bp.route('/allocation')
 @login_required
@@ -204,14 +183,11 @@ def allocation():
     holdings = Holding.query.filter_by(user_id=current_user.id).all()
     if not holdings:
         return render_template('allocation.html', allocation_data=[])
-        
     symbols = {h.symbol for h in holdings}
     price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
-    
     allocation_data = []
     for h in holdings:
         price_data = price_data_map.get(h.symbol)
         if price_data and price_data.get('price') is not None:
             allocation_data.append({'symbol': h.symbol, 'value': h.quantity * price_data['price']})
-            
     return render_template('allocation.html', allocation_data=allocation_data)
