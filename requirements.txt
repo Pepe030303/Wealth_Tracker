@@ -1,10 +1,13 @@
+# requirements.txt
+
 Flask
 Flask-SQLAlchemy
+Flask-Login
 python-dotenv
 requests
 gunicorn
 mysql-connector-python
-yfinance  # <-- 추가
-pandas    # <-- 추가
-mysql-connector-python
-Flask-Login
+yfinance
+pandas
+rq
+redis  # <-- 이 줄을 추가하세요
