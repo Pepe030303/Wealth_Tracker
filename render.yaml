@@ -1,10 +1,11 @@
-# render.yaml
+# render.yaml (PostgreSQL 최종 버전)
 
 services:
   # 1. Flask 웹 애플리케이션 서비스
   - type: web
     name: wealth-tracker-app
     env: python
+    plan: free # 무료 플랜 명시
     buildCommand: "pip install -r requirements.txt"
     startCommand: "gunicorn app:app"
     envVars:
@@ -12,12 +13,12 @@ services:
         value: 3.11
       - key: DATABASE_URL
         fromDatabase:
-          name: wealth-tracker-db # 아래 'databases'에 정의된 이름과 일치
+          name: wealth-tracker-db
           property: connectionString
       - key: REDIS_URL
         fromService:
           type: redis
-          name: wealth-tracker-redis # 아래 Redis 서비스에 정의된 이름과 일치
+          name: wealth-tracker-redis
           property: connectionString
       - key: SESSION_SECRET
         generateValue: true
@@ -26,6 +27,7 @@ services:
   - type: worker
     name: wealth-tracker-worker
     env: python
+    plan: free # 무료 플랜 명시
     buildCommand: "pip install -r requirements.txt"
     startCommand: "rq worker wealth-tracker-tasks"
     envVars:
@@ -49,13 +51,10 @@ services:
   # 3. Redis 서비스
   - type: redis
     name: wealth-tracker-redis
-    plan: free
-    ipAllowList: [] # Render 내부 네트워크에서만 접속
-    maxmemoryPolicy: allkeys-lru
+    plan: free # 무료 플랜 명시
 
 databases:
-  # 4. PostgreSQL 데이터베이스 (MySQL 대신 사용)
+  # 4. PostgreSQL 데이터베이스
   - name: wealth-tracker-db
-    plan: free
-    # PostgreSQL의 경우, Render가 databaseName과 user를 자동으로 생성해주므로
-    # 명시하지 않아도 됩니다.
+    plan: free # 무료 플랜 명시
+    # databaseType: postgresql # 명시적으로 타입을 지정해 줄 수도 있습니다.
