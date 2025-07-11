@@ -1,7 +1,5 @@
 {% extends "base.html" %}
-
 {% block title %}보유 종목 - Wealth Tracker{% endblock %}
-
 {% block content %}
 <div class="row">
     <div class="col-12">
@@ -11,36 +9,29 @@
         </div>
     </div>
 </div>
-
 <div class="card">
     <div class="card-body p-0">
         {% if holdings_data %}
             <div class="list-group list-group-flush">
                 {% for data in holdings_data %}
-                <div class="list-group-item">
-                    <div class="row align-items-center">
-                        <!-- 종목 정보 (로고, 심볼, 수량) -->
-                        <div class="col-md-6 col-lg-7 d-flex align-items-center mb-3 mb-md-0">
-                            <img src="{{ data.logo or url_for('static', filename='logos/placeholder.png') }}"
+                <div class="list-group-item p-3">
+                    <div class="row align-items-center g-3">
+                        <div class="col-md-6 col-lg-7 d-flex align-items-center">
+                            <img src="{{ url_for('static', filename='logos/placeholder.png') }}"
                                  alt="{{ data.holding.symbol }} logo"
-                                 class="stock-logo me-3"
-                                 onerror="this.src='{{ url_for('static', filename='logos/placeholder.png') }}';">
+                                 class="stock-logo me-3">
                             <div>
                                 <h5 class="mb-0 fw-bold">{{ data.holding.symbol }}</h5>
-                                <span class="text-muted">{{ data.holding.quantity }} 주</span>
+                                <span class="text-muted">{{ data.holding.quantity | round(2) }} 주</span>
                             </div>
                         </div>
-
-                        <!-- 가격 및 손익 정보 -->
                         <div class="col-md-6 col-lg-5 text-md-end">
-                            <!-- 현재가 / 평균단가 -->
-                            <div class="d-flex justify-content-between justify-content-md-end">
-                                <span class="text-muted me-2">현재가/평단가:</span>
+                            <div class="d-flex justify-content-between justify-content-md-end border-bottom pb-2 mb-2">
+                                <span class="text-muted me-2 small">현재가/평단가</span>
                                 <span>${{ "%.2f"|format(data.current_price) }} / ${{ "%.2f"|format(data.holding.purchase_price) }}</span>
                             </div>
-                            <!-- 손익 / 수익률 -->
                             <div class="d-flex justify-content-between justify-content-md-end {% if data.profit_loss >= 0 %}text-success{% else %}text-danger{% endif %}">
-                                <span class="me-2">손익/수익률:</span>
+                                <span class="me-2 small">손익/수익률</span>
                                 <span class="fw-bold">
                                     ${{ "%.2f"|format(data.profit_loss) }} ({{ "%.2f"|format(data.profit_loss_percent) }}%)
                                 </span>
