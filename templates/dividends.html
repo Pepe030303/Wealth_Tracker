@@ -1,64 +1,26 @@
 {% extends "base.html" %}
-
 {% block title %}예상 배당금 - Wealth Tracker{% endblock %}
 
 {% block content %}
 <div class="row">
-    <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1><i class="fas fa-coins me-2"></i>예상 배당금</h1>
-        </div>
-    </div>
+    <div class="col-12"><h1 class="mb-4"><i class="fas fa-coins me-2"></i>예상 배당금</h1></div>
 </div>
-
 <div class="row">
-    <!-- 배당금 배분 차트 -->
-    <div class="col-lg-5 mb-4">
-        <div class="card h-100">
-            <div class="card-header">
-                <h5 class="card-title mb-0">연간 예상 배당금 비중</h5>
-            </div>
-            <div class="card-body d-flex align-items-center justify-content-center">
-                {% if allocation_data %}
-                    <canvas id="dividendAllocationChart" style="max-height: 300px;"></canvas>
-                {% else %}
-                    <p class="text-muted">데이터가 없습니다.</p>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-    
-    <!-- 배당 수익률 테이블 -->
     <div class="col-lg-7 mb-4">
         <div class="card h-100">
-            <div class="card-header">
-                <h5 class="card-title mb-0">종목별 예상 배당금</h5>
-            </div>
+            <div class="card-header"><h5 class="card-title mb-0">종목별 예상 배당금</h5></div>
             <div class="card-body p-0">
                 {% if dividend_metrics %}
                     <div class="table-responsive">
                         <table class="table table-hover mb-0">
-                            <thead>
-                                <tr>
-                                    <th>종목</th>
-                                    <th>배당 월</th>
-                                    <th class="text-end">예상 연간 배당금</th>
-                                    <th class="text-end">현재 배당수익률</th>
-                                </tr>
-                            </thead>
+                            <thead><tr><th>종목</th><th>배당 월</th><th class="text-end">연간 예상액</th><th class="text-end">수익률</th></tr></thead>
                             <tbody>
                                 {% for symbol, metrics in dividend_metrics.items() %}
                                 <tr>
                                     <td><strong class="fs-5">{{ symbol }}</strong></td>
                                     <td>
                                         {% set months = symbol | korean_dividend_months %}
-                                        {% if months %}
-                                            {% for month in months %}
-                                                <span class="badge bg-secondary me-1">{{ month }}</span>
-                                            {% endfor %}
-                                        {% else %}
-                                            -
-                                        {% endif %}
+                                        {% for month in months %}<span class="badge bg-secondary me-1">{{ month }}</span>{% endfor %}
                                     </td>
                                     <td class="text-end">${{ "%.2f"|format(metrics.expected_annual_dividend) }}</td>
                                     <td class="text-end text-success fw-bold">{{ "%.2f"|format(metrics.dividend_yield) }}%</td>
@@ -67,12 +29,24 @@
                             </tbody>
                         </table>
                     </div>
-                {% else %}
-                    <div class="text-center py-5">
-                        <p class="text-muted">배당 정보가 없습니다.</p>
-                    </div>
-                {% endif %}
+                {% else %}<div class="text-center py-5"><p class="text-muted">배당 정보가 없습니다. 배당 정보를 가져오려면 거래 기록을 추가해주세요.</p></div>{% endif %}
             </div>
+        </div>
+    </div>
+    <div class="col-lg-5 mb-4">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="card-title mb-0">연간 예상 배당금 비중</h5></div>
+            <div class="card-body d-flex align-items-center justify-content-center">
+                {% if allocation_data %}<canvas id="dividendAllocationChart"></canvas>{% else %}<p class="text-muted">데이터가 없습니다.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header"><h5 class="card-title mb-0">월별 예상 배당금</h5></div>
+            <div class="card-body"><canvas id="monthlyDividendChart" style="height: 250px;"></canvas></div>
         </div>
     </div>
 </div>
@@ -83,25 +57,20 @@
 document.addEventListener('DOMContentLoaded', function () {
     const allocationData = {{ allocation_data|tojson }};
     const allocationCtx = document.getElementById('dividendAllocationChart')?.getContext('2d');
+    const monthlyData = {{ monthly_dividend_data|tojson }};
+    const monthlyCtx = document.getElementById('monthlyDividendChart')?.getContext('2d');
 
     if (allocationCtx && allocationData && allocationData.length > 0) {
         new Chart(allocationCtx, {
-            type: 'pie',
-            data: {
-                labels: allocationData.map(item => item.symbol),
-                datasets: [{
-                    data: allocationData.map(item => item.expected_annual_dividend),
-                    backgroundColor: ['#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6f42c1'],
-                    borderColor: '#343a40',
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'right' }
-                }
-            }
+            type: 'pie', data: { labels: allocationData.map(i => i.symbol), datasets: [{ data: allocationData.map(i => i.value), backgroundColor: ['#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6f42c1'], borderColor: '#343a40' }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+        });
+    }
+
+    if (monthlyCtx && monthlyData && monthlyData.data.some(d => d > 0)) {
+        new Chart(monthlyCtx, {
+            type: 'bar', data: { labels: monthlyData.labels, datasets: [{ label: '예상 배당금 ($)', data: monthlyData.data, backgroundColor: 'rgba(25, 135, 84, 0.7)' }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: (v) => '$' + v.toFixed(0) } } } }
         });
     }
 });
