@@ -17,8 +17,7 @@ main_bp = Blueprint('main', __name__)
 # --- 인증 라우트 ---
 @main_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated:
-        return redirect(url_for('main.dashboard'))
+    if current_user.is_authenticated: return redirect(url_for('main.dashboard'))
     if request.method == 'POST':
         user = User.query.filter_by(username=request.form.get('username')).first()
         if user and user.check_password(request.form.get('password')):
@@ -35,21 +34,15 @@ def logout():
 
 @main_bp.route('/signup', methods=['GET', 'POST'])
 def signup():
-    if current_user.is_authenticated:
-        return redirect(url_for('main.dashboard'))
+    if current_user.is_authenticated: return redirect(url_for('main.dashboard'))
     if request.method == 'POST':
         username, email, password = request.form.get('username'), request.form.get('email'), request.form.get('password')
-        if not all([username, email, password]):
-            flash('모든 필드를 입력해주세요.', 'error')
-        elif User.query.filter_by(username=username).first():
-            flash('이미 사용 중인 아이디입니다.', 'error')
-        elif User.query.filter_by(email=email).first():
-            flash('이미 사용 중인 이메일입니다.', 'error')
+        if not all([username, email, password]): flash('모든 필드를 입력해주세요.', 'error')
+        elif User.query.filter_by(username=username).first(): flash('이미 사용 중인 아이디입니다.', 'error')
+        elif User.query.filter_by(email=email).first(): flash('이미 사용 중인 이메일입니다.', 'error')
         else:
-            user = User(username=username, email=email)
-            user.set_password(password)
-            db.session.add(user)
-            db.session.commit()
+            user = User(username=username, email=email); user.set_password(password)
+            db.session.add(user); db.session.commit()
             flash('회원가입이 완료되었습니다! 로그인해주세요.', 'success')
             return redirect(url_for('main.login'))
     return render_template('signup.html')
@@ -62,24 +55,17 @@ def signup():
 def dashboard():
     holdings = Holding.query.filter_by(user_id=current_user.id).all()
     if not holdings:
-        return render_template('dashboard.html', summary={}, sector_allocation=[], holdings_data=[])
+        return render_template('dashboard.html', summary={}, sector_allocation=[])
 
-    # 1. API 호출 최소화를 위해 모든 보유 종목의 심볼을 한 번에 모음
     symbols = {h.symbol for h in holdings}
-    
-    # 2. 각 API에서 필요한 정보를 한 번에 가져옴
     price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
     profile_data_map = {s: stock_api.get_stock_profile(s) for s in symbols}
 
-    # 3. 데이터 계산
-    total_investment = 0
+    total_investment = sum(h.quantity * h.purchase_price for h in holdings)
     total_current_value = 0
     sector_values = {}
-    holdings_data_for_dashboard = []
 
     for h in holdings:
-        total_investment += h.quantity * h.purchase_price
-        
         price_data = price_data_map.get(h.symbol)
         current_price = price_data['price'] if price_data and price_data.get('price') is not None else h.purchase_price
         current_value = h.quantity * current_price
@@ -88,14 +74,6 @@ def dashboard():
         profile = profile_data_map.get(h.symbol)
         sector = profile['sector'] if profile and profile.get('sector') else 'N/A'
         sector_values[sector] = sector_values.get(sector, 0) + current_value
-
-        # 대시보드용 보유 종목 데이터 (필요한 경우)
-        holdings_data_for_dashboard.append({
-            'holding': h,
-            'current_price': current_price,
-            'profit_loss': current_value - (h.quantity * h.purchase_price),
-            'profit_loss_percent': (current_value - (h.quantity * h.purchase_price)) / (h.quantity * h.purchase_price) * 100 if h.purchase_price > 0 else 0,
-        })
 
     total_profit_loss = total_current_value - total_investment
     total_return_percent = (total_profit_loss / total_investment * 100) if total_investment > 0 else 0
@@ -109,10 +87,7 @@ def dashboard():
     
     sector_allocation = [{'sector': k, 'value': v} for k, v in sector_values.items()]
 
-    return render_template('dashboard.html', 
-                           summary=summary, 
-                           sector_allocation=sector_allocation,
-                           holdings_data=holdings_data_for_dashboard)
+    return render_template('dashboard.html', summary=summary, sector_allocation=sector_allocation)
 
 @main_bp.route('/holdings')
 @login_required
@@ -135,7 +110,7 @@ def holdings():
         
         holdings_data.append({
             'holding': h,
-            'logo': profile_data.get('logo') if profile_data else None,
+            'logo': None, # EDGAR API는 로고를 제공하지 않으므로 None으로 고정
             'current_price': current_price,
             'profit_loss': current_value - (h.quantity * h.purchase_price),
             'profit_loss_percent': (current_value - (h.quantity * h.purchase_price)) / (h.quantity * h.purchase_price) * 100 if h.purchase_price > 0 else 0,
@@ -147,7 +122,21 @@ def holdings():
 def trades():
     trades = Trade.query.filter_by(user_id=current_user.id).order_by(Trade.trade_date.desc(), Trade.id.desc()).all()
     holdings = Holding.query.filter_by(user_id=current_user.id).all()
-    trade_summary = {h.symbol: {'net_quantity': h.quantity, 'avg_price': h.purchase_price} for h in holdings}
+    
+    # 거래 요약 정보 계산 로직 수정
+    trade_summary = {}
+    for holding in holdings:
+        # 각 보유 종목에 대한 매수/매도 기록을 조회하여 계산
+        buy_trades = Trade.query.filter_by(user_id=current_user.id, symbol=holding.symbol, trade_type='buy').all()
+        sell_trades = Trade.query.filter_by(user_id=current_user.id, symbol=holding.symbol, trade_type='sell').all()
+        
+        trade_summary[holding.symbol] = {
+            'net_quantity': holding.quantity,
+            'avg_price': holding.purchase_price,
+            'total_bought': sum(t.quantity for t in buy_trades),
+            'total_sold': sum(t.quantity for t in sell_trades)
+        }
+        
     return render_template('trades.html', trades=trades, trade_summary=trade_summary)
 
 @main_bp.route('/trades/add', methods=['POST'])
@@ -183,7 +172,7 @@ def delete_trade(trade_id):
     recalculate_holdings(current_user.id)
     flash(f'{trade.symbol} 거래가 삭제되었습니다.', 'success')
     return redirect(url_for('main.trades'))
-
+    
 @main_bp.route('/dividends')
 @login_required
 def dividends():
