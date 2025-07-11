@@ -10,6 +10,7 @@ import yfinance as yf
 
 logger = logging.getLogger(__name__)
 
+# --- (User, Trade, Holding, StockPrice, DividendUpdateCache 모델은 이전과 동일) ---
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), index=True, unique=True, nullable=False)
@@ -17,7 +18,6 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(256))
     def set_password(self, p): self.password_hash = generate_password_hash(p)
     def check_password(self, p): return check_password_hash(self.password_hash, p)
-    def __repr__(self): return f'<User {self.username}>'
 
 class Trade(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -27,7 +27,6 @@ class Trade(db.Model):
     price = db.Column(db.Float, nullable=False)
     trade_date = db.Column(db.Date, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
-    user = db.relationship('User', backref=db.backref('trades', lazy='dynamic'))
 
 class Holding(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -36,7 +35,6 @@ class Holding(db.Model):
     purchase_price = db.Column(db.Float, nullable=False)
     purchase_date = db.Column(db.DateTime)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
-    user = db.relationship('User', backref=db.backref('holdings', lazy='dynamic'))
 
 class Dividend(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -45,7 +43,6 @@ class Dividend(db.Model):
     amount_per_share = db.Column(db.Float, nullable=True)
     dividend_date = db.Column(db.Date, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
-    user = db.relationship('User', backref=db.backref('dividends', lazy='dynamic'))
 
 class StockPrice(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -56,13 +53,12 @@ class StockPrice(db.Model):
     last_updated = db.Column(db.DateTime, default=datetime.utcnow)
 
 class DividendUpdateCache(db.Model):
-    """사용자별 배당금 업데이트 시점을 기록하는 캐시 테이블"""
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, unique=True)
     last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    __table_args__ = (db.UniqueConstraint('user_id', name='_user_id_uc'),)
 
 def recalculate_holdings(user_id):
+    # ... (이전과 동일)
     Holding.query.filter_by(user_id=user_id).delete()
     symbols = db.session.query(Trade.symbol).filter_by(user_id=user_id).distinct().all()
     for (symbol,) in symbols:
@@ -87,35 +83,57 @@ def recalculate_holdings(user_id):
             db.session.add(holding)
     db.session.commit()
 
+# --- 배당금 계산 함수 개선 ---
 def calculate_dividend_metrics(user_id):
     holdings = Holding.query.filter_by(user_id=user_id).all()
     dividend_metrics = {}
-    from stock_api import stock_api
+    from stock_api import stock_api # 순환 참조 방지
+    
     for h in holdings:
-        # yfinance에서 직접 최신 배당 정보를 가져옵니다 (DB 의존성 제거)
         try:
             ticker = yf.Ticker(h.symbol)
-            # 가장 최근의 주당 배당금
-            dps = ticker.dividends.iloc[-1] if not ticker.dividends.empty else 0
-            # 연간 배당 횟수 (보통 4회로 가정, REITs 등은 다를 수 있음)
-            payout_frequency = 4
-            if dps > 0:
-                expected_annual_dividend = float(dps) * h.quantity * payout_frequency
+            info = ticker.info
+            
+            # ETF와 일반 주식에 대한 배당 정보 추출 방식 분기
+            annual_dps = 0
+            if info.get('quoteType') == 'ETF' and info.get('trailingAnnualDividendRate'):
+                annual_dps = info.get('trailingAnnualDividendRate', 0)
+            elif info.get('dividendRate'):
+                annual_dps = info.get('dividendRate', 0)
+            elif not ticker.dividends.empty:
+                # 최근 1년치 배당금 합산 (더 정확하지만 느릴 수 있음)
+                last_year_dividends = ticker.dividends.loc[ticker.dividends.index > datetime.now() - timedelta(days=365)]
+                annual_dps = last_year_dividends.sum()
+            
+            if annual_dps > 0:
+                expected_annual_dividend = float(annual_dps) * h.quantity
                 price_data = stock_api.get_stock_price(h.symbol)
-                if price_data and price_data.get('price'):
-                    current_market_value = price_data['price'] * h.quantity
-                    dividend_yield = (expected_annual_dividend / current_market_value) * 100 if current_market_value > 0 else 0
+                
+                if price_data and price_data.get('price') and price_data['price'] > 0:
+                    dividend_yield = (annual_dps / price_data['price']) * 100
                 else:
-                    dividend_yield = 0
-                dividend_metrics[h.symbol] = {'expected_annual_dividend': expected_annual_dividend, 'dividend_yield': dividend_yield}
+                    dividend_yield = info.get('yield', 0) * 100
+
+                dividend_metrics[h.symbol] = {
+                    'expected_annual_dividend': expected_annual_dividend,
+                    'dividend_yield': dividend_yield
+                }
         except Exception as e:
             logger.warning(f"{h.symbol}의 배당 지표 계산 실패: {e}")
             continue
+            
     return dividend_metrics
 
-def get_dividend_allocation_data(user_id):
-    metrics = calculate_dividend_metrics(user_id)
-    return [{'symbol': s, 'value': m['expected_annual_dividend']} for s, m in metrics.items() if m['expected_annual_dividend'] > 0]
+def get_dividend_allocation_data(dividend_metrics):
+    return [{'symbol': s, 'value': m['expected_annual_dividend']} for s, m in dividend_metrics.items() if m.get('expected_annual_dividend', 0) > 0]
 
-DIVIDEND_MONTHS = {'AAPL': ['Feb', 'May', 'Aug', 'Nov'], 'MSFT': ['Mar', 'Jun', 'Sep', 'Dec'], 'JPM': ['Jan', 'Apr', 'Jul', 'Oct'], 'JNJ': ['Mar', 'Jun', 'Sep', 'Dec'], 'KO': ['Apr', 'Jul', 'Oct', 'Dec'], 'O': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']}
-def get_dividend_months(symbol): return DIVIDEND_MONTHS.get(symbol, [])
+# --- 배당 월 정보 추가 ---
+DIVIDEND_MONTHS = {
+    'AAPL': ['Feb', 'May', 'Aug', 'Nov'], 'MSFT': ['Mar', 'Jun', 'Sep', 'Dec'], 
+    'JPM': ['Jan', 'Apr', 'Jul', 'Oct'], 'JNJ': ['Mar', 'Jun', 'Sep', 'Dec'], 
+    'KO': ['Apr', 'Jul', 'Oct', 'Dec'], 'PG': ['Feb', 'May', 'Aug', 'Nov'],
+    'O': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], # 월배당
+    'SCHD': ['Mar', 'Jun', 'Sep', 'Dec'], # 분기배당
+    'PFE': ['Mar', 'Jun', 'Sep', 'Dec']  # 분기배당
+}
+def get_dividend_months(symbol): return DIVIDEND_MONTHS.get(symbol.upper(), [])
