@@ -10,7 +10,6 @@ import yfinance as yf
 
 logger = logging.getLogger(__name__)
 
-# --- (User, Trade, Holding, StockPrice, DividendUpdateCache 모델은 이전과 동일) ---
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), index=True, unique=True, nullable=False)
@@ -58,7 +57,6 @@ class DividendUpdateCache(db.Model):
     last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 def recalculate_holdings(user_id):
-    # ... (이전과 동일)
     Holding.query.filter_by(user_id=user_id).delete()
     symbols = db.session.query(Trade.symbol).filter_by(user_id=user_id).distinct().all()
     for (symbol,) in symbols:
@@ -97,7 +95,8 @@ def calculate_dividend_metrics(user_id):
             elif info.get('dividendRate'):
                 annual_dps = info.get('dividendRate', 0)
             elif not ticker.dividends.empty:
-                last_year_dividends = ticker.dividends.loc[ticker.dividends.index > datetime.now() - timedelta(days=365)]
+                naive_dividends = ticker.dividends.tz_localize(None)
+                last_year_dividends = naive_dividends[naive_dividends.index > datetime.now() - timedelta(days=365)]
                 annual_dps = last_year_dividends.sum()
             
             if annual_dps > 0:
@@ -119,44 +118,25 @@ def calculate_dividend_metrics(user_id):
 def get_dividend_allocation_data(dividend_metrics):
     return [{'symbol': s, 'value': m['expected_annual_dividend']} for s, m in dividend_metrics.items() if m.get('expected_annual_dividend', 0) > 0]
 
-# --- 동적 배당 월 조회 기능 ---
-
-# API 호출 결과를 저장할 메모리 캐시
 DIVIDEND_MONTH_CACHE = {}
-# 월 숫자 -> 영문 이름 변환 맵
-MONTH_NUMBER_TO_NAME = {
-    1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
-    7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
-}
+MONTH_NUMBER_TO_NAME = {1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'}
 
 def get_dividend_months(symbol):
-    """
-    API를 통해 종목의 배당 월을 동적으로 조회하고 캐싱합니다.
-    """
     upper_symbol = symbol.upper()
     if upper_symbol in DIVIDEND_MONTH_CACHE:
         return DIVIDEND_MONTH_CACHE[upper_symbol]
-
     try:
         ticker = yf.Ticker(upper_symbol)
-        # 지난 15개월간의 배당 기록을 가져옵니다.
-        dividends = ticker.dividends.loc[ticker.dividends.index > datetime.now() - timedelta(days=450)]
-        if dividends.empty:
+        naive_dividends = ticker.dividends.tz_localize(None)
+        dividends_last_15m = naive_dividends[naive_dividends.index > datetime.now() - timedelta(days=450)]
+        if dividends_last_15m.empty:
             DIVIDEND_MONTH_CACHE[upper_symbol] = []
             return []
-        
-        # 날짜에서 월(month)만 추출하여 중복을 제거하고 정렬합니다.
-        paid_months = sorted(list(dividends.index.month.unique()))
-        
-        # 월 숫자를 영문 이름으로 변환합니다.
+        paid_months = sorted(list(dividends_last_15m.index.month.unique()))
         month_names = [MONTH_NUMBER_TO_NAME.get(m, '') for m in paid_months]
-        
-        # 결과를 캐시에 저장하고 반환합니다.
         DIVIDEND_MONTH_CACHE[upper_symbol] = month_names
         return month_names
-        
     except Exception as e:
         logger.warning(f"{upper_symbol}의 배당 월 정보 조회 실패: {e}")
-        # 실패 시 빈 리스트를 캐시에 저장하여 반복적인 실패 방지
         DIVIDEND_MONTH_CACHE[upper_symbol] = []
         return []
