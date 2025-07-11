@@ -109,51 +109,68 @@ def get_dividend_allocation_data(dividend_metrics):
     return [{'symbol': s, 'value': m['expected_annual_dividend']} for s, m in dividend_metrics.items() if m.get('expected_annual_dividend', 0) > 0]
 
 
-# --- 동적 배당 월 조회 기능 (최종 디버깅 및 수정) ---
+# --- 동적 배당 월 조회 기능 (최종 디버깅 및 하드코딩 포함) ---
 
 DIVIDEND_MONTH_CACHE = {}
 MONTH_NUMBER_TO_NAME = {1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'}
 
+# 문제가 발생하는 특정 종목에 대한 예외 처리 (하드코딩)
+HARDCODED_DIVIDEND_MONTHS = {
+    'SCHD': [3, 6, 9, 12]
+}
+
 def get_dividend_months(symbol):
+    """
+    yfinance의 다양한 소스를 통해 배당 월을 추정하고, 특정 종목은 하드코딩된 값을 사용합니다.
+    """
     upper_symbol = symbol.upper()
     if upper_symbol in DIVIDEND_MONTH_CACHE:
         return DIVIDEND_MONTH_CACHE[upper_symbol]
 
-    paid_months = set() # 중복을 허용하지 않는 set으로 변경
+    # 1. 하드코딩된 종목인지 먼저 확인 (가장 확실)
+    if upper_symbol in HARDCODED_DIVIDEND_MONTHS:
+        paid_months = HARDCODED_DIVIDEND_MONTHS[upper_symbol]
+        month_names = [MONTH_NUMBER_TO_NAME.get(m, '') for m in paid_months]
+        DIVIDEND_MONTH_CACHE[upper_symbol] = month_names
+        logger.info(f"[{upper_symbol}] 하드코딩된 배당 월 정보 사용: {paid_months}")
+        return month_names
+
+    paid_months = set()
     try:
         ticker = yf.Ticker(upper_symbol)
         
-        # 1. 과거 배당락일(.actions)을 우선적으로 사용
+        # --- 디버깅을 위한 원시 데이터 로깅 ---
+        logger.info(f"--- [{upper_symbol}] 배당 월 정보 조회 시작 ---")
+        try:
+            logger.info(f"[{upper_symbol}] .calendar 정보: {ticker.calendar}")
+        except Exception: logger.info(f"[{upper_symbol}] .calendar 정보 없음")
+        try:
+            logger.info(f"[{upper_symbol}] .actions 정보 (최근 5개): \n{ticker.actions.tail()}")
+        except Exception: logger.info(f"[{upper_symbol}] .actions 정보 없음")
+        try:
+            logger.info(f"[{upper_symbol}] .dividends 정보 (최근 5개): \n{ticker.dividends.tail()}")
+        except Exception: logger.info(f"[{upper_symbol}] .dividends 정보 없음")
+        logger.info(f"-------------------------------------------------")
+        # ------------------------------------
+
+        # 2. 과거 배당락일(.actions)을 우선적으로 사용
         actions = ticker.actions
-        if actions is not None and not actions.empty and 'Dividends' in actions.columns:
+        if actions is not None and not actions.empty and 'Dividends' in actions.columns and actions['Dividends'].sum() > 0:
             ex_dividend_dates = actions[actions['Dividends'] > 0].index
-            
-            # --- 디버깅 로그 추가 ---
-            logger.info(f"[{upper_symbol}] yfinance .actions에서 가져온 배당락일: {ex_dividend_dates.month.tolist()}")
-            
-            # 시간대 정보 제거
             ex_dividend_dates_naive = ex_dividend_dates.tz_convert(None) if ex_dividend_dates.tz is not None else ex_dividend_dates
-            
-            # 기간 필터링 없이 모든 과거 데이터의 월을 집계
             for date in ex_dividend_dates_naive:
                 paid_months.add(date.month)
         
-        # 2. 로직 보강: 분기 배당주인데 월이 3개만 잡히는 경우 (예: 3, 6, 12)
-        if len(paid_months) == 3:
-            # 월 간의 차이를 계산
-            sorted_months = sorted(list(paid_months))
-            diffs = np.diff(sorted_months)
-            # 대부분의 차이가 3 (분기)인데, 하나만 다른 경우
-            if np.count_nonzero(diffs == 3) >= 1:
-                # 누락된 분기를 찾아 추가
-                for i in range(4):
-                    # 기준 월(예: 3월)에서 3개월씩 더해봄
-                    expected_month = (sorted_months[0] - 1 + 3 * i) % 12 + 1
-                    paid_months.add(expected_month)
-                logger.info(f"[{upper_symbol}] 분기 배당 보정 적용 후: {sorted(list(paid_months))}")
+        # 3. .actions 정보가 부족할 경우, .dividends(지급일) 정보로 보완
+        if len(paid_months) < 2: # 분기 배당인데 정보가 부족한 경우를 대비
+            dividends = ticker.dividends
+            if dividends is not None and not dividends.empty:
+                dividends_naive = dividends.index.tz_convert(None) if dividends.index.tz is not None else dividends.index
+                for date in dividends_naive:
+                    paid_months.add(date.month)
 
     except Exception as e:
-        logger.warning(f"({upper_symbol}) 배당 월 정보 조회 실패: {e}")
+        logger.warning(f"({upper_symbol}) 배당 월 정보 조회 중 예외 발생: {e}")
     
     final_months = sorted(list(paid_months))
     if final_months:
