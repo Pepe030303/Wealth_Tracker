@@ -1,5 +1,6 @@
 # models.py
 
+import os
 from datetime import datetime, timedelta
 from sqlalchemy import func, extract
 from flask_login import UserMixin
@@ -8,9 +9,17 @@ from app import db
 import logging
 import yfinance as yf
 import pandas as pd
+import nasdaqdatalink
 
 logger = logging.getLogger(__name__)
 
+# --- Nasdaq API 설정 ---
+try:
+    nasdaqdatalink.ApiConfig.api_key = os.environ.get("NASDAQ_API_KEY")
+except Exception as e:
+    logger.error(f"Nasdaq API 키 설정 실패: {e}")
+
+# --- (User, Trade, Holding, StockPrice, DividendUpdateCache 모델은 이전과 동일) ---
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), index=True, unique=True, nullable=False)
@@ -119,31 +128,68 @@ def calculate_dividend_metrics(user_id):
 def get_dividend_allocation_data(dividend_metrics):
     return [{'symbol': s, 'value': m['expected_annual_dividend']} for s, m in dividend_metrics.items() if m.get('expected_annual_dividend', 0) > 0]
 
+
+# --- 동적 배당 월 조회 기능 (Nasdaq 우선) ---
+
 DIVIDEND_MONTH_CACHE = {}
 MONTH_NUMBER_TO_NAME = {1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'}
 
-def get_dividend_months(symbol):
-    upper_symbol = symbol.upper()
-    if upper_symbol in DIVIDEND_MONTH_CACHE:
-        return DIVIDEND_MONTH_CACHE[upper_symbol]
+def get_dividend_months_from_nasdaq(symbol):
+    """Nasdaq Data Link API를 사용하여 배당 월 조회"""
     try:
-        ticker = yf.Ticker(upper_symbol)
+        # Mergent's dividend data (코드: MDB/D) 사용
+        data = nasdaqdatalink.get_table('MDB/D', ticker=symbol, paginate=True)
+        if data.empty or 'ex_date' not in data.columns:
+            return None
+        
+        # 'ex_date'가 배당락일. 지난 15개월 데이터 필터링
+        start_date = pd.to_datetime(datetime.now() - timedelta(days=450))
+        recent_dividends = data[data['ex_date'] > start_date]
+        if recent_dividends.empty:
+            return None
+            
+        return sorted(list(recent_dividends['ex_date'].dt.month.unique()))
+    except Exception as e:
+        logger.info(f"Nasdaq API 조회 실패 ({symbol}): {e}")
+        return None
+
+def get_dividend_months_from_yfinance(symbol):
+    """yfinance를 사용하여 배당 월 조회 (폴백용)"""
+    try:
+        ticker = yf.Ticker(symbol)
         actions = ticker.actions
         if actions.empty or 'Dividends' not in actions.columns or actions['Dividends'].sum() == 0:
-            DIVIDEND_MONTH_CACHE[upper_symbol] = []
-            return []
+            return None
         ex_dividend_dates = actions[actions['Dividends'] > 0].index
         start_date = pd.to_datetime(datetime.now() - timedelta(days=450))
         ex_dividend_dates_naive = ex_dividend_dates.tz_localize(None)
         recent_ex_dates = ex_dividend_dates_naive[ex_dividend_dates_naive > start_date]
         if recent_ex_dates.empty:
-            DIVIDEND_MONTH_CACHE[upper_symbol] = []
-            return []
-        paid_months = sorted(list(recent_ex_dates.month.unique()))
+            return None
+        return sorted(list(recent_ex_dates.month.unique()))
+    except Exception as e:
+        logger.warning(f"yfinance 배당 월 정보 조회 실패 ({symbol}): {e}")
+        return None
+
+def get_dividend_months(symbol):
+    upper_symbol = symbol.upper()
+    if upper_symbol in DIVIDEND_MONTH_CACHE:
+        return DIVIDEND_MONTH_CACHE[upper_symbol]
+
+    paid_months = None
+    # 1. Nasdaq API 먼저 시도
+    if nasdaqdatalink.ApiConfig.api_key:
+        paid_months = get_dividend_months_from_nasdaq(upper_symbol)
+    
+    # 2. Nasdaq 실패 시 yfinance로 폴백
+    if paid_months is None:
+        paid_months = get_dividend_months_from_yfinance(upper_symbol)
+
+    if paid_months:
         month_names = [MONTH_NUMBER_TO_NAME.get(m, '') for m in paid_months]
         DIVIDEND_MONTH_CACHE[upper_symbol] = month_names
         return month_names
-    except Exception as e:
-        logger.warning(f"{upper_symbol}의 배당 월 정보 조회 실패: {e}")
+    else:
+        # 최종 실패 시 빈 리스트 캐싱
         DIVIDEND_MONTH_CACHE[upper_symbol] = []
         return []
