@@ -1,5 +1,4 @@
 # requirements.txt
-
 Flask
 Flask-SQLAlchemy
 Flask-Login
