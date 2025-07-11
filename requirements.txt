@@ -10,3 +10,4 @@ yfinance
 pandas
 rq
 redis
+nasdaq-data-link
