@@ -5,7 +5,9 @@ from datetime import datetime
 from sqlalchemy import func, extract
 from app import db, task_queue
 from tasks import update_all_dividends_for_user
-from models import User, Holding, Dividend, Trade, recalculate_holdings, calculate_dividend_metrics, get_dividend_allocation_data, get_dividend_months
+# models에서는 DB 클래스만, utils에서 헬퍼 함수를 가져옵니다.
+from models import User, Holding, Dividend, Trade, recalculate_holdings
+from utils import calculate_dividend_metrics, get_dividend_allocation_data, get_dividend_months
 from stock_api import stock_api
 from flask_login import login_user, logout_user, current_user, login_required
 import logging
@@ -61,8 +63,7 @@ def dashboard():
     total_current_value = sum(h.quantity * (price_data_map.get(h.symbol, {}).get('price') or h.purchase_price) for h in holdings)
     sector_values = {}
     for h in holdings:
-        profile = profile_data_map.get(h.symbol, {})
-        sector = profile.get('sector', 'N/A')
+        profile = profile_data_map.get(h.symbol, {}); sector = profile.get('sector', 'N/A')
         current_value = h.quantity * (price_data_map.get(h.symbol, {}).get('price') or h.purchase_price)
         sector_values[sector] = sector_values.get(sector, 0) + current_value
     
@@ -81,27 +82,22 @@ def dashboard():
         if payout_months and metrics.get('expected_annual_dividend'):
             monthly_amount = metrics['expected_annual_dividend'] / len(payout_months)
             for month_str in payout_months:
-                if month_str in month_map:
-                    monthly_totals[month_map[month_str]] += monthly_amount
+                if month_str in month_map: monthly_totals[month_map[month_str]] += monthly_amount
     
     monthly_dividend_data = {'labels': [f"{i+1}월" for i in range(12)], 'data': monthly_totals}
-
     return render_template('dashboard.html', summary=summary, sector_allocation=sector_allocation, monthly_dividend_data=monthly_dividend_data)
 
 @main_bp.route('/holdings')
 @login_required
 def holdings():
     holdings = Holding.query.filter_by(user_id=current_user.id).order_by(Holding.symbol).all()
-    if not holdings:
-        return render_template('holdings.html', holdings_data=[])
+    if not holdings: return render_template('holdings.html', holdings_data=[])
     symbols = {h.symbol for h in holdings}
     price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
-    profile_data_map = {s: stock_api.get_stock_profile(s) for s in symbols}
     holdings_data = []
     for h in holdings:
         price_data = price_data_map.get(h.symbol)
-        profile_data = profile_data_map.get(h.symbol)
-        current_price = price_data['price'] if price_data and price_data.get('price') is not None else h.purchase_price
+        current_price = price_data['price'] if price_data else h.purchase_price
         current_value = h.quantity * current_price
         holdings_data.append({
             'holding': h, 'logo': None, 'current_price': current_price,
@@ -119,11 +115,7 @@ def trades():
     for holding in holdings:
         buy_trades = Trade.query.filter_by(user_id=current_user.id, symbol=holding.symbol, trade_type='buy').all()
         sell_trades = Trade.query.filter_by(user_id=current_user.id, symbol=holding.symbol, trade_type='sell').all()
-        trade_summary[holding.symbol] = {
-            'net_quantity': holding.quantity, 'avg_price': holding.purchase_price,
-            'total_bought': sum(t.quantity for t in buy_trades),
-            'total_sold': sum(t.quantity for t in sell_trades)
-        }
+        trade_summary[holding.symbol] = {'net_quantity': holding.quantity, 'avg_price': holding.purchase_price, 'total_bought': sum(t.quantity for t in buy_trades), 'total_sold': sum(t.quantity for t in sell_trades)}
     return render_template('trades.html', trades=trades, trade_summary=trade_summary)
 
 @main_bp.route('/trades/add', methods=['POST'])
@@ -161,8 +153,7 @@ def delete_trade(trade_id):
 @main_bp.route('/dividends')
 @login_required
 def dividends():
-    if task_queue:
-        task_queue.enqueue(update_all_dividends_for_user, current_user.id, job_timeout='10m')
+    if task_queue: task_queue.enqueue(update_all_dividends_for_user, current_user.id, job_timeout='10m')
     dividend_metrics = calculate_dividend_metrics(current_user.id)
     allocation_data = get_dividend_allocation_data(dividend_metrics)
     monthly_totals = [0] * 12
@@ -172,8 +163,7 @@ def dividends():
         if payout_months and metrics.get('expected_annual_dividend'):
             monthly_amount = metrics['expected_annual_dividend'] / len(payout_months)
             for month_str in payout_months:
-                if month_str in month_map:
-                    monthly_totals[month_map[month_str]] += monthly_amount
+                if month_str in month_map: monthly_totals[month_map[month_str]] += monthly_amount
     monthly_dividend_data = {'labels': [f"{i+1}월" for i in range(12)], 'data': monthly_totals}
     return render_template('dividends.html', dividend_metrics=dividend_metrics, allocation_data=allocation_data, monthly_dividend_data=monthly_dividend_data)
 
@@ -181,8 +171,7 @@ def dividends():
 @login_required
 def allocation():
     holdings = Holding.query.filter_by(user_id=current_user.id).all()
-    if not holdings:
-        return render_template('allocation.html', allocation_data=[])
+    if not holdings: return render_template('allocation.html', allocation_data=[])
     symbols = {h.symbol for h in holdings}
     price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
     allocation_data = []
