@@ -1,19 +1,14 @@
 # models.py
 
-import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from sqlalchemy import func, extract
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from app import db
 import logging
-import yfinance as yf
-import pandas as pd
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# --- (다른 모델 클래스와 함수는 이전과 동일) ---
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), index=True, unique=True, nullable=False)
@@ -67,12 +62,15 @@ def recalculate_holdings(user_id):
         trades = Trade.query.filter_by(symbol=symbol, user_id=user_id).order_by(Trade.trade_date, Trade.id).all()
         buy_queue = []
         for trade in trades:
-            if trade.trade_type == 'buy': buy_queue.append({'quantity': trade.quantity, 'price': trade.price, 'date': trade.trade_date})
+            if trade.trade_type == 'buy':
+                buy_queue.append({'quantity': trade.quantity, 'price': trade.price, 'date': trade.trade_date})
             elif trade.trade_type == 'sell':
                 sell_quantity = trade.quantity
                 while sell_quantity > 0 and buy_queue:
-                    if buy_queue[0]['quantity'] <= sell_quantity: sell_quantity -= buy_queue[0]['quantity']; buy_queue.pop(0)
-                    else: buy_queue[0]['quantity'] -= sell_quantity; sell_quantity = 0
+                    if buy_queue[0]['quantity'] <= sell_quantity:
+                        sell_quantity -= buy_queue[0]['quantity']; buy_queue.pop(0)
+                    else:
+                        buy_queue[0]['quantity'] -= sell_quantity; sell_quantity = 0
         final_quantity = sum(b['quantity'] for b in buy_queue)
         if final_quantity > 0:
             final_cost = sum(b['quantity'] * b['price'] for b in buy_queue)
@@ -81,102 +79,3 @@ def recalculate_holdings(user_id):
             holding = Holding(symbol=symbol, quantity=final_quantity, purchase_price=avg_price, purchase_date=latest_buy_date, user_id=user_id)
             db.session.add(holding)
     db.session.commit()
-
-def calculate_dividend_metrics(user_id):
-    holdings = Holding.query.filter_by(user_id=user_id).all()
-    dividend_metrics = {}
-    from stock_api import stock_api
-    for h in holdings:
-        try:
-            ticker = yf.Ticker(h.symbol); info = ticker.info; annual_dps = 0
-            if info.get('quoteType') == 'ETF' and info.get('trailingAnnualDividendRate'): annual_dps = info.get('trailingAnnualDividendRate', 0)
-            elif info.get('dividendRate'): annual_dps = info.get('dividendRate', 0)
-            elif not ticker.dividends.empty:
-                naive_dividends = ticker.dividends.tz_localize(None)
-                last_year_dividends = naive_dividends[naive_dividends.index > datetime.now() - timedelta(days=365)]
-                annual_dps = last_year_dividends.sum()
-            if annual_dps > 0:
-                expected_annual_dividend = float(annual_dps) * h.quantity; price_data = stock_api.get_stock_price(h.symbol)
-                if price_data and price_data.get('price') and price_data['price'] > 0: dividend_yield = (annual_dps / price_data['price']) * 100
-                else: dividend_yield = info.get('yield', 0) * 100
-                dividend_metrics[h.symbol] = {'expected_annual_dividend': expected_annual_dividend, 'dividend_yield': dividend_yield}
-        except Exception as e:
-            logger.warning(f"({h.symbol}) 배당 지표 계산 실패: {e}")
-            continue
-    return dividend_metrics
-
-def get_dividend_allocation_data(dividend_metrics):
-    return [{'symbol': s, 'value': m['expected_annual_dividend']} for s, m in dividend_metrics.items() if m.get('expected_annual_dividend', 0) > 0]
-
-
-# --- 동적 배당 월 조회 기능 (최종 디버깅 및 하드코딩 포함) ---
-
-DIVIDEND_MONTH_CACHE = {}
-MONTH_NUMBER_TO_NAME = {1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'}
-
-# 문제가 발생하는 특정 종목에 대한 예외 처리 (하드코딩)
-HARDCODED_DIVIDEND_MONTHS = {
-    'SCHD': [3, 6, 9, 12]
-}
-
-def get_dividend_months(symbol):
-    """
-    yfinance의 다양한 소스를 통해 배당 월을 추정하고, 특정 종목은 하드코딩된 값을 사용합니다.
-    """
-    upper_symbol = symbol.upper()
-    if upper_symbol in DIVIDEND_MONTH_CACHE:
-        return DIVIDEND_MONTH_CACHE[upper_symbol]
-
-    # 1. 하드코딩된 종목인지 먼저 확인 (가장 확실)
-    if upper_symbol in HARDCODED_DIVIDEND_MONTHS:
-        paid_months = HARDCODED_DIVIDEND_MONTHS[upper_symbol]
-        month_names = [MONTH_NUMBER_TO_NAME.get(m, '') for m in paid_months]
-        DIVIDEND_MONTH_CACHE[upper_symbol] = month_names
-        logger.info(f"[{upper_symbol}] 하드코딩된 배당 월 정보 사용: {paid_months}")
-        return month_names
-
-    paid_months = set()
-    try:
-        ticker = yf.Ticker(upper_symbol)
-        
-        # --- 디버깅을 위한 원시 데이터 로깅 ---
-        logger.info(f"--- [{upper_symbol}] 배당 월 정보 조회 시작 ---")
-        try:
-            logger.info(f"[{upper_symbol}] .calendar 정보: {ticker.calendar}")
-        except Exception: logger.info(f"[{upper_symbol}] .calendar 정보 없음")
-        try:
-            logger.info(f"[{upper_symbol}] .actions 정보 (최근 5개): \n{ticker.actions.tail()}")
-        except Exception: logger.info(f"[{upper_symbol}] .actions 정보 없음")
-        try:
-            logger.info(f"[{upper_symbol}] .dividends 정보 (최근 5개): \n{ticker.dividends.tail()}")
-        except Exception: logger.info(f"[{upper_symbol}] .dividends 정보 없음")
-        logger.info(f"-------------------------------------------------")
-        # ------------------------------------
-
-        # 2. 과거 배당락일(.actions)을 우선적으로 사용
-        actions = ticker.actions
-        if actions is not None and not actions.empty and 'Dividends' in actions.columns and actions['Dividends'].sum() > 0:
-            ex_dividend_dates = actions[actions['Dividends'] > 0].index
-            ex_dividend_dates_naive = ex_dividend_dates.tz_convert(None) if ex_dividend_dates.tz is not None else ex_dividend_dates
-            for date in ex_dividend_dates_naive:
-                paid_months.add(date.month)
-        
-        # 3. .actions 정보가 부족할 경우, .dividends(지급일) 정보로 보완
-        if len(paid_months) < 2: # 분기 배당인데 정보가 부족한 경우를 대비
-            dividends = ticker.dividends
-            if dividends is not None and not dividends.empty:
-                dividends_naive = dividends.index.tz_convert(None) if dividends.index.tz is not None else dividends.index
-                for date in dividends_naive:
-                    paid_months.add(date.month)
-
-    except Exception as e:
-        logger.warning(f"({upper_symbol}) 배당 월 정보 조회 중 예외 발생: {e}")
-    
-    final_months = sorted(list(paid_months))
-    if final_months:
-        month_names = [MONTH_NUMBER_TO_NAME.get(m, '') for m in final_months]
-        DIVIDEND_MONTH_CACHE[upper_symbol] = month_names
-        return month_names
-    else:
-        DIVIDEND_MONTH_CACHE[upper_symbol] = []
-        return []
