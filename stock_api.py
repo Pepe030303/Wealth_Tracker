@@ -36,7 +36,7 @@ def load_ticker_to_cik_map():
     try:
         headers = {'User-Agent': 'WealthTracker/1.0 (dev@example.com)'}
         url = "https://www.sec.gov/files/company_tickers.json"
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         all_companies = response.json()
         TICKER_TO_CIK_MAP = {data['ticker']: str(data['cik_str']).zfill(10) for data in all_companies.values()}
@@ -87,12 +87,10 @@ class StockAPIService:
     
     def get_stock_profile(self, symbol):
         if symbol in PROFILE_CACHE: return PROFILE_CACHE[symbol]
-        
         sector = 'N/A'
         try:
             info = yf.Ticker(symbol).info
             quote_type = info.get('quoteType')
-            
             if quote_type == 'ETF':
                 sector = 'ETF'
             else:
@@ -101,13 +99,13 @@ class StockAPIService:
                     headers = {'User-Agent': 'WealthTracker/1.0 (dev@example.com)'}
                     url = f"https://data.sec.gov/submissions/CIK{cik}.json"
                     response = self.session.get(url, headers=headers, timeout=5)
+                    response.raise_for_status()
                     data = response.json()
                     sector = get_sector_from_sic(data.get('sic'))
                 if sector == 'N/A' and info.get('sector'):
                     sector = info.get('sector')
         except Exception as e:
             logger.warning(f"프로필 조회 실패 ({symbol}): {e}")
-
         profile = {'sector': sector, 'logo': None}
         PROFILE_CACHE[symbol] = profile
         return profile
