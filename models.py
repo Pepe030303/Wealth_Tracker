@@ -1,6 +1,6 @@
 # models.py
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import func, extract
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -83,37 +83,30 @@ def recalculate_holdings(user_id):
             db.session.add(holding)
     db.session.commit()
 
-# --- 배당금 계산 함수 개선 ---
 def calculate_dividend_metrics(user_id):
     holdings = Holding.query.filter_by(user_id=user_id).all()
     dividend_metrics = {}
-    from stock_api import stock_api # 순환 참조 방지
-    
+    from stock_api import stock_api
     for h in holdings:
         try:
             ticker = yf.Ticker(h.symbol)
             info = ticker.info
-            
-            # ETF와 일반 주식에 대한 배당 정보 추출 방식 분기
             annual_dps = 0
             if info.get('quoteType') == 'ETF' and info.get('trailingAnnualDividendRate'):
                 annual_dps = info.get('trailingAnnualDividendRate', 0)
             elif info.get('dividendRate'):
                 annual_dps = info.get('dividendRate', 0)
             elif not ticker.dividends.empty:
-                # 최근 1년치 배당금 합산 (더 정확하지만 느릴 수 있음)
                 last_year_dividends = ticker.dividends.loc[ticker.dividends.index > datetime.now() - timedelta(days=365)]
                 annual_dps = last_year_dividends.sum()
             
             if annual_dps > 0:
                 expected_annual_dividend = float(annual_dps) * h.quantity
                 price_data = stock_api.get_stock_price(h.symbol)
-                
                 if price_data and price_data.get('price') and price_data['price'] > 0:
                     dividend_yield = (annual_dps / price_data['price']) * 100
                 else:
                     dividend_yield = info.get('yield', 0) * 100
-
                 dividend_metrics[h.symbol] = {
                     'expected_annual_dividend': expected_annual_dividend,
                     'dividend_yield': dividend_yield
@@ -121,19 +114,49 @@ def calculate_dividend_metrics(user_id):
         except Exception as e:
             logger.warning(f"{h.symbol}의 배당 지표 계산 실패: {e}")
             continue
-            
     return dividend_metrics
 
 def get_dividend_allocation_data(dividend_metrics):
     return [{'symbol': s, 'value': m['expected_annual_dividend']} for s, m in dividend_metrics.items() if m.get('expected_annual_dividend', 0) > 0]
 
-# --- 배당 월 정보 추가 ---
-DIVIDEND_MONTHS = {
-    'AAPL': ['Feb', 'May', 'Aug', 'Nov'], 'MSFT': ['Mar', 'Jun', 'Sep', 'Dec'], 
-    'JPM': ['Jan', 'Apr', 'Jul', 'Oct'], 'JNJ': ['Mar', 'Jun', 'Sep', 'Dec'], 
-    'KO': ['Apr', 'Jul', 'Oct', 'Dec'], 'PG': ['Feb', 'May', 'Aug', 'Nov'],
-    'O': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], # 월배당
-    'SCHD': ['Mar', 'Jun', 'Sep', 'Dec'], # 분기배당
-    'PFE': ['Mar', 'Jun', 'Sep', 'Dec']  # 분기배당
+# --- 동적 배당 월 조회 기능 ---
+
+# API 호출 결과를 저장할 메모리 캐시
+DIVIDEND_MONTH_CACHE = {}
+# 월 숫자 -> 영문 이름 변환 맵
+MONTH_NUMBER_TO_NAME = {
+    1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
+    7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
 }
-def get_dividend_months(symbol): return DIVIDEND_MONTHS.get(symbol.upper(), [])
+
+def get_dividend_months(symbol):
+    """
+    API를 통해 종목의 배당 월을 동적으로 조회하고 캐싱합니다.
+    """
+    upper_symbol = symbol.upper()
+    if upper_symbol in DIVIDEND_MONTH_CACHE:
+        return DIVIDEND_MONTH_CACHE[upper_symbol]
+
+    try:
+        ticker = yf.Ticker(upper_symbol)
+        # 지난 15개월간의 배당 기록을 가져옵니다.
+        dividends = ticker.dividends.loc[ticker.dividends.index > datetime.now() - timedelta(days=450)]
+        if dividends.empty:
+            DIVIDEND_MONTH_CACHE[upper_symbol] = []
+            return []
+        
+        # 날짜에서 월(month)만 추출하여 중복을 제거하고 정렬합니다.
+        paid_months = sorted(list(dividends.index.month.unique()))
+        
+        # 월 숫자를 영문 이름으로 변환합니다.
+        month_names = [MONTH_NUMBER_TO_NAME.get(m, '') for m in paid_months]
+        
+        # 결과를 캐시에 저장하고 반환합니다.
+        DIVIDEND_MONTH_CACHE[upper_symbol] = month_names
+        return month_names
+        
+    except Exception as e:
+        logger.warning(f"{upper_symbol}의 배당 월 정보 조회 실패: {e}")
+        # 실패 시 빈 리스트를 캐시에 저장하여 반복적인 실패 방지
+        DIVIDEND_MONTH_CACHE[upper_symbol] = []
+        return []
