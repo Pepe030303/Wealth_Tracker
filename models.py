@@ -59,10 +59,56 @@ class DividendUpdateCache(db.Model):
     last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 def recalculate_holdings(user_id):
-    # ... (이전과 동일)
-    
+    Holding.query.filter_by(queue:
+                    if buy_queue[0]['quantity'] <= sell_quantity:
+                        sell_quantity -=user_id=user_id).delete()
+    symbols = db.session.query(Trade.symbol).filter_by buy_queue[0]['quantity']
+                        buy_queue.pop(0)
+                    else:
+                        (user_id=user_id).distinct().all()
+    for (symbol,) in symbols:
+        buy_queue[0]['quantity'] -= sell_quantity
+                        sell_quantity = 0
+        final_trades = Trade.query.filter_by(symbol=symbol, user_id=user_id).order_quantity = sum(b['quantity'] for b in buy_queue)
+        if final_quantity > 0by(Trade.trade_date, Trade.id).all()
+        buy_queue = []
+        for:
+            final_cost = sum(b['quantity'] * b['price'] for b in buy_queue trade in trades:
+            if trade.trade_type == 'buy':
+                buy_queue.append({')
+            avg_price = final_cost / final_quantity
+            latest_buy_date = max(quantity': trade.quantity, 'price': trade.price, 'date': trade.trade_date})
+            b['date'] for b in buy_queue) if buy_queue else None
+            holding = Holding(symbolelif trade.trade_type == 'sell':
+                sell_quantity = trade.quantity
+                while sell_=symbol, quantity=final_quantity, purchase_price=avg_price, purchase_date=latest_buy_datequantity > 0 and buy_queue:
+                    if buy_queue[0]['quantity'] <= sell_quantity:
+                        sell_quantity -= buy_queue[0]['quantity']; buy_queue.pop(0)
+, user_id=user_id)
+            db.session.add(holding)
+    db.session                    else:
+                        buy_queue[0]['quantity'] -= sell_quantity; sell_quantity = 0.commit()
+
 def calculate_dividend_metrics(user_id):
-    # ... (이전과 동일)
+    holdings = Holding.query.
+        final_quantity = sum(b['quantity'] for b in buy_queue)
+        if final_quantity > filter_by(user_id=user_id).all()
+    dividend_metrics = {}
+    from0:
+            final_cost = sum(b['quantity'] * b['price'] for b in buy_ stock_api import stock_api
+    for h in holdings:
+        try:
+            ticker = yfqueue)
+            avg_price = final_cost / final_quantity
+            latest_buy_date = max.Ticker(h.symbol)
+            info = ticker.info
+            annual_dps = 0
+(b['date'] for b in buy_queue) if buy_queue else None
+            holding = Holding(            if info.get('quoteType') == 'ETF' and info.get('trailingAnnualDividendRate'):
+symbol=symbol, quantity=final_quantity, purchase_price=avg_price, purchase_date=latest_buy_date, user_id=user_id)
+            db.session.add(holding)
+                    annual_dps = info.get('trailingAnnualDividendRate', 0)
+            elif info.getdb.session.commit()
 
 def get_dividend_allocation_data(dividend_metrics):
     return [{'symbol': s, 'value': m['expected_annual_dividend']} for s, m in dividend_metrics.items() if m.get('expected_annual_dividend', 0) > 0]
