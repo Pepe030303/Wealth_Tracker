@@ -5,7 +5,6 @@ from datetime import datetime
 from sqlalchemy import func, extract
 from app import db, task_queue
 from tasks import update_all_dividends_for_user
-# models에서는 DB 클래스만, utils에서 헬퍼 함수를 가져옵니다.
 from models import User, Holding, Dividend, Trade, recalculate_holdings
 from utils import calculate_dividend_metrics, get_dividend_allocation_data, get_dividend_months
 from stock_api import stock_api
@@ -54,11 +53,9 @@ def dashboard():
     dividend_metrics = calculate_dividend_metrics(current_user.id)
     if not holdings:
         return render_template('dashboard.html', summary={}, sector_allocation=[], monthly_dividend_data={'labels': [], 'data': []})
-
     symbols = {h.symbol for h in holdings}
     price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
     profile_data_map = {s: stock_api.get_stock_profile(s) for s in symbols}
-
     total_investment = sum(h.quantity * h.purchase_price for h in holdings)
     total_current_value = sum(h.quantity * (price_data_map.get(h.symbol, {}).get('price') or h.purchase_price) for h in holdings)
     sector_values = {}
@@ -66,7 +63,6 @@ def dashboard():
         profile = profile_data_map.get(h.symbol, {}); sector = profile.get('sector', 'N/A')
         current_value = h.quantity * (price_data_map.get(h.symbol, {}).get('price') or h.purchase_price)
         sector_values[sector] = sector_values.get(sector, 0) + current_value
-    
     total_profit_loss = total_current_value - total_investment
     summary = {
         'total_investment': total_investment, 'total_current_value': total_current_value,
@@ -74,7 +70,6 @@ def dashboard():
         'total_return_percent': (total_profit_loss / total_investment * 100) if total_investment > 0 else 0
     }
     sector_allocation = [{'sector': k, 'value': v} for k, v in sector_values.items()]
-
     monthly_totals = [0] * 12
     month_map = {'Jan':0, 'Feb':1, 'Mar':2, 'Apr':3, 'May':4, 'Jun':5, 'Jul':6, 'Aug':7, 'Sep':8, 'Oct':9, 'Nov':10, 'Dec':11}
     for symbol, metrics in dividend_metrics.items():
@@ -83,7 +78,6 @@ def dashboard():
             monthly_amount = metrics['expected_annual_dividend'] / len(payout_months)
             for month_str in payout_months:
                 if month_str in month_map: monthly_totals[month_map[month_str]] += monthly_amount
-    
     monthly_dividend_data = {'labels': [f"{i+1}월" for i in range(12)], 'data': monthly_totals}
     return render_template('dashboard.html', summary=summary, sector_allocation=sector_allocation, monthly_dividend_data=monthly_dividend_data)
 
