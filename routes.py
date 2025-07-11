@@ -1,3 +1,4 @@
+
 # routes.py
 
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
@@ -13,8 +14,6 @@ import logging
 logger = logging.getLogger(__name__)
 main_bp = Blueprint('main', __name__)
 
-
-# --- 인증 라우트 ---
 @main_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated: return redirect(url_for('main.dashboard'))
@@ -47,12 +46,12 @@ def signup():
             return redirect(url_for('main.login'))
     return render_template('signup.html')
 
-
-# --- 대시보드 라우트 수정 ---
 @main_bp.route('/')
 @login_required
 def dashboard():
     holdings = Holding.query.filter_by(user_id=current_user.id).all()
+    dividend_metrics = calculate_dividend_metrics(current_user.id)
+
     if not holdings:
         return render_template('dashboard.html', summary={}, sector_allocation=[], monthly_dividend_data={'labels': [], 'data': []})
 
@@ -61,18 +60,14 @@ def dashboard():
     profile_data_map = {s: stock_api.get_stock_profile(s) for s in symbols}
 
     total_investment = sum(h.quantity * h.purchase_price for h in holdings)
-    total_current_value = 0
+    total_current_value = sum(h.quantity * (price_data_map.get(h.symbol, {}).get('price') or h.purchase_price) for h in holdings)
     sector_values = {}
-    
     for h in holdings:
-        price_data = price_data_map.get(h.symbol)
-        current_price = price_data['price'] if price_data else h.purchase_price
-        current_value = h.quantity * current_price
-        total_current_value += current_value
-        profile = profile_data_map.get(h.symbol)
-        sector = profile['sector'] if profile else 'N/A'
+        profile = profile_data_map.get(h.symbol, {})
+        sector = profile.get('sector', 'N/A')
+        current_value = h.quantity * (price_data_map.get(h.symbol, {}).get('price') or h.purchase_price)
         sector_values[sector] = sector_values.get(sector, 0) + current_value
-
+    
     total_profit_loss = total_current_value - total_investment
     summary = {
         'total_investment': total_investment, 'total_current_value': total_current_value,
@@ -81,28 +76,19 @@ def dashboard():
     }
     sector_allocation = [{'sector': k, 'value': v} for k, v in sector_values.items()]
 
-    # 월별 예상 배당금 계산 로직 추가
-    dividend_metrics = calculate_dividend_metrics(current_user.id)
     monthly_totals = [0] * 12
     month_map = {'Jan':0, 'Feb':1, 'Mar':2, 'Apr':3, 'May':4, 'Jun':5, 'Jul':6, 'Aug':7, 'Sep':8, 'Oct':9, 'Nov':10, 'Dec':11}
     for symbol, metrics in dividend_metrics.items():
-        # 분기/월 배당금을 12개월로 분배
         payout_months = get_dividend_months(symbol)
-        if payout_months:
+        if payout_months and metrics.get('expected_annual_dividend'):
             monthly_amount = metrics['expected_annual_dividend'] / len(payout_months)
             for month_str in payout_months:
                 if month_str in month_map:
                     monthly_totals[month_map[month_str]] += monthly_amount
     
-    monthly_dividend_data = {
-        'labels': [f"{i+1}월" for i in range(12)],
-        'data': monthly_totals
-    }
+    monthly_dividend_data = {'labels': [f"{i+1}월" for i in range(12)], 'data': monthly_totals}
 
-    return render_template('dashboard.html', 
-                           summary=summary, 
-                           sector_allocation=sector_allocation,
-                           monthly_dividend_data=monthly_dividend_data)
+    return render_template('dashboard.html', summary=summary, sector_allocation=sector_allocation, monthly_dividend_data=monthly_dividend_data)
 
 @main_bp.route('/holdings')
 @login_required
@@ -193,12 +179,24 @@ def delete_trade(trade_id):
 def dividends():
     if task_queue:
         task_queue.enqueue(update_all_dividends_for_user, current_user.id, job_timeout='10m')
-        flash('보유 종목의 배당금 정보를 백그라운드에서 업데이트하고 있습니다. 잠시 후 새로고침하여 확인하세요.', 'info')
-    else:
-        flash('백그라운드 작업 큐에 연결할 수 없어 자동 업데이트를 건너뜁니다.', 'warning')
+    
     dividend_metrics = calculate_dividend_metrics(current_user.id)
-    allocation_data = get_dividend_allocation_data(current_user.id)
-    return render_template('dividends.html', dividend_metrics=dividend_metrics, allocation_data=allocation_data)
+    allocation_data = get_dividend_allocation_data(dividend_metrics)
+    
+    monthly_totals = [0] * 12
+    month_map = {'Jan':0, 'Feb':1, 'Mar':2, 'Apr':3, 'May':4, 'Jun':5, 'Jul':6, 'Aug':7, 'Sep':8, 'Oct':9, 'Nov':10, 'Dec':11}
+    for symbol, metrics in dividend_metrics.items():
+        payout_months = get_dividend_months(symbol)
+        if payout_months and metrics.get('expected_annual_dividend'):
+            monthly_amount = metrics['expected_annual_dividend'] / len(payout_months)
+            for month_str in payout_months:
+                if month_str in month_map:
+                    monthly_totals[month_map[month_str]] += monthly_amount
+    
+    monthly_dividend_data = {'labels': [f"{i+1}월" for i in range(12)], 'data': monthly_totals}
+
+    return render_template('dividends.html', dividend_metrics=dividend_metrics, allocation_data=allocation_data, monthly_dividend_data=monthly_dividend_data)
+
 
 @main_bp.route('/allocation')
 @login_required
