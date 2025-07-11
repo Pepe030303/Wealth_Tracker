@@ -62,6 +62,7 @@ class StockAPIService:
             cached.current_price = float(price_data['price'])
             cached.change = float(price_data.get('change', 0))
             cached.change_percent = float(price_data.get('change_percent', 0))
+            cached.last_updated = datetime.utcnow()
             db.session.commit()
 
     def get_stock_price(self, symbol):
@@ -72,7 +73,11 @@ class StockAPIService:
             ticker = yf.Ticker(symbol)
             hist = ticker.history(period="2d", auto_adjust=True)
             if not hist.empty and len(hist) >= 2:
-                price_data = {'price': float(hist['Close'].iloc[-1]), 'change': float(hist['Close'].iloc[-1] - hist['Close'].iloc[-2]), 'change_percent': float((hist['Close'].iloc[-1] / hist['Close'].iloc[-2] - 1) * 100)}
+                price_data = {
+                    'price': float(hist['Close'].iloc[-1]),
+                    'change': float(hist['Close'].iloc[-1] - hist['Close'].iloc[-2]),
+                    'change_percent': float((hist['Close'].iloc[-1] / hist['Close'].iloc[-2] - 1) * 100)
+                }
             elif not hist.empty:
                 price_data = {'price': float(hist['Close'].iloc[-1]), 'change': 0, 'change_percent': 0}
         except Exception as e:
@@ -83,32 +88,25 @@ class StockAPIService:
     def get_stock_profile(self, symbol):
         if symbol in PROFILE_CACHE: return PROFILE_CACHE[symbol]
         
-        # 1. EDGAR API로 먼저 시도
-        cik = TICKER_TO_CIK_MAP.get(symbol.upper())
         sector = 'N/A'
-        if cik:
-            try:
-                headers = {'User-Agent': 'WealthTracker/1.0 (dev@example.com)'}
-                url = f"https://data.sec.gov/submissions/CIK{cik}.json"
-                response = self.session.get(url, headers=headers, timeout=5)
-                response.raise_for_status()
-                data = response.json()
-                # ETF의 경우 운용사 섹터가 나오므로, 일반 기업에 더 유용
-                if data.get('category') != 'Exchange Traded Fund':
+        try:
+            info = yf.Ticker(symbol).info
+            quote_type = info.get('quoteType')
+            
+            if quote_type == 'ETF':
+                sector = 'ETF'
+            else:
+                cik = TICKER_TO_CIK_MAP.get(symbol.upper())
+                if cik:
+                    headers = {'User-Agent': 'WealthTracker/1.0 (dev@example.com)'}
+                    url = f"https://data.sec.gov/submissions/CIK{cik}.json"
+                    response = self.session.get(url, headers=headers, timeout=5)
+                    data = response.json()
                     sector = get_sector_from_sic(data.get('sic'))
-            except Exception as e:
-                logger.error(f"EDGAR API 프로필 조회 실패 ({symbol}): {e}")
-        
-        # 2. EDGAR에서 유의미한 정보를 얻지 못하면 yfinance로 보완
-        if sector == 'N/A' or sector == 'Finance, Insurance, Real Estate':
-            try:
-                info = yf.Ticker(symbol).info
-                # yfinance는 ETF에 대해 'category'를 제공하는 경우가 많음
-                y_sector = info.get('category') or info.get('sector')
-                if y_sector:
-                    sector = y_sector
-            except Exception as e:
-                logger.warning(f"yfinance 프로필 보완 조회 실패 ({symbol}): {e}")
+                if sector == 'N/A' and info.get('sector'):
+                    sector = info.get('sector')
+        except Exception as e:
+            logger.warning(f"프로필 조회 실패 ({symbol}): {e}")
 
         profile = {'sector': sector, 'logo': None}
         PROFILE_CACHE[symbol] = profile
