@@ -1,35 +1,24 @@
 # render.yaml
 
-# 이 파일은 Render가 프로젝트를 배포하는 방법을 정의합니다.
-# 공식 문서: https://render.com/docs/blueprint-spec
-
 services:
   # 1. Flask 웹 애플리케이션 서비스
   - type: web
     name: wealth-tracker-app
-    # 실행 환경을 Python 3으로 설정합니다.
     env: python
-    # 빌드 시 실행할 명령어입니다. requirements.txt의 모든 라이브러리를 설치합니다.
     buildCommand: "pip install -r requirements.txt"
-    # 서비스 시작 시 실행할 명령어입니다. Gunicorn을 사용해 앱을 실행합니다.
     startCommand: "gunicorn app:app"
-    # 환경 변수 설정
     envVars:
-      # PYTHON_VERSION 환경 변수는 buildCommand에 영향을 줍니다.
       - key: PYTHON_VERSION
         value: 3.11
-      # DATABASE_URL: 아래 'databases' 섹션에서 생성될 DB의 접속 주소를 자동으로 가져옵니다.
       - key: DATABASE_URL
         fromDatabase:
-          name: wealth-tracker-db # 아래 'databases'에 정의된 이름과 일치해야 합니다.
+          name: wealth-tracker-db # 아래 'databases'에 정의된 이름과 일치
           property: connectionString
-      # REDIS_URL: 아래 'services' 섹션에서 생성될 Redis의 접속 주소를 자동으로 가져옵니다.
       - key: REDIS_URL
         fromService:
           type: redis
-          name: wealth-tracker-redis # 아래 Redis 서비스에 정의된 이름과 일치해야 합니다.
+          name: wealth-tracker-redis # 아래 Redis 서비스에 정의된 이름과 일치
           property: connectionString
-      # SESSION_SECRET: Render가 안전한 랜덤 값을 자동으로 생성하여 주입합니다.
       - key: SESSION_SECRET
         generateValue: true
 
@@ -38,12 +27,10 @@ services:
     name: wealth-tracker-worker
     env: python
     buildCommand: "pip install -r requirements.txt"
-    # RQ 워커를 실행하고, 'wealth-tracker-tasks' 큐를 감시합니다.
     startCommand: "rq worker wealth-tracker-tasks"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11
-      # 웹 서비스와 동일하게 DB, Redis 접속 정보가 필요합니다.
       - key: DATABASE_URL
         fromDatabase:
           name: wealth-tracker-db
@@ -53,7 +40,6 @@ services:
           type: redis
           name: wealth-tracker-redis
           property: connectionString
-      # 세션 키는 웹 서비스의 값을 동기화하여 사용합니다.
       - key: SESSION_SECRET
         fromService:
           type: web
@@ -63,18 +49,13 @@ services:
   # 3. Redis 서비스
   - type: redis
     name: wealth-tracker-redis
-    # 무료 플랜을 사용합니다.
     plan: free
-    # IP 허용 목록을 비워두면 Render 내부 네트워크에서만 접속 가능합니다.
-    ipAllowList: []
-    maxmemoryPolicy: allkeys-lru # 메모리가 꽉 찼을 때의 정책
+    ipAllowList: [] # Render 내부 네트워크에서만 접속
+    maxmemoryPolicy: allkeys-lru
 
 databases:
-  # 4. MySQL 데이터베이스
+  # 4. PostgreSQL 데이터베이스 (MySQL 대신 사용)
   - name: wealth-tracker-db
-    # 데이터베이스 내부 이름
-    databaseName: wealthtrackerdb
-    # 데이터베이스 사용자 이름
-    user: wealthtrackeruser
-    # 무료 플랜을 사용합니다.
     plan: free
+    # PostgreSQL의 경우, Render가 databaseName과 user를 자동으로 생성해주므로
+    # 명시하지 않아도 됩니다.
