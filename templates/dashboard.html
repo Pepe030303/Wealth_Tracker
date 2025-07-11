@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block title %}대시보드 - Wealth Tracker{% endblock %}
-
 {% block content %}
 <div class="row">
     <div class="col-12"><h1 class="mb-4"><i class="fas fa-tachometer-alt me-2"></i>대시보드</h1></div>
@@ -8,34 +7,22 @@
 
 {% if summary.total_investment %}
 <div class="row">
-    <!-- 포트폴리오 요약 -->
     <div class="col-lg-7 mb-4">
         <div class="card h-100">
             <div class="card-header"><h5 class="card-title mb-0">포트폴리오 요약</h5></div>
             <div class="card-body d-flex align-items-center">
                 <div class="w-100">
-                    <div class="d-flex justify-content-between align-items-baseline mb-2">
-                        <span class="text-muted">현재 가치</span>
-                        <h3 class="fw-bold mb-0">${{ "%.2f"|format(summary.total_current_value) }}</h3>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-baseline mb-3">
-                        <span class="text-muted">총 투자금액</span>
-                        <h5 class="mb-0">${{ "%.2f"|format(summary.total_investment) }}</h5>
-                    </div>
+                    <div class="d-flex justify-content-between align-items-baseline mb-2"><span class="text-muted">현재 가치</span><h3 class="fw-bold mb-0">${{ "%.2f"|format(summary.total_current_value) }}</h3></div>
+                    <div class="d-flex justify-content-between align-items-baseline mb-3"><span class="text-muted">총 투자금액</span><h5 class="mb-0">${{ "%.2f"|format(summary.total_investment) }}</h5></div>
                     <hr>
                     <div class="d-flex justify-content-between align-items-baseline mt-3 {% if summary.total_profit_loss >= 0 %}text-success{% else %}text-danger{% endif %}">
                         <span class="fw-bold">총 손익</span>
-                        <div class="text-end">
-                            <h4 class="fw-bold mb-0">${{ "%.2f"|format(summary.total_profit_loss) }}</h4>
-                            <span class="fs-5">({{ "%.2f"|format(summary.total_return_percent) }}%)</span>
-                        </div>
+                        <div class="text-end"><h4 class="fw-bold mb-0">${{ "%.2f"|format(summary.total_profit_loss) }}</h4><span class="fs-5">({{ "%.2f"|format(summary.total_return_percent) }}%)</span></div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
-    <!-- 섹터 비중 (트리맵) -->
     <div class="col-lg-5 mb-4">
         <div class="card h-100">
             <div class="card-header"><h5 class="card-title mb-0">섹터 비중</h5></div>
@@ -45,19 +32,14 @@
         </div>
     </div>
 </div>
-
-<!-- 월별 예상 배당금 -->
 <div class="row">
     <div class="col-12">
         <div class="card">
             <div class="card-header"><h5 class="card-title mb-0">월별 예상 배당금</h5></div>
-            <div class="card-body">
-                <canvas id="monthlyDividendChart" style="height: 250px;"></canvas>
-            </div>
+            <div class="card-body"><canvas id="monthlyDividendChart" style="height: 250px;"></canvas></div>
         </div>
     </div>
 </div>
-
 {% else %}
 <div class="text-center py-5">
     <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
@@ -66,70 +48,44 @@
 </div>
 {% endif %}
 {% endblock %}
-
 {% block scripts %}
-<!-- 트리맵 차트 플러그인 CDN 추가 -->
 <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2.3.0/dist/chartjs-chart-treemap.min.js"></script>
-
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const sectorData = {{ sector_allocation|tojson }};
     const sectorCtx = document.getElementById('sectorAllocationChart')?.getContext('2d');
-    const monthlyDividendData = {{ monthly_dividend_data|tojson }};
+    const monthlyData = {{ monthly_dividend_data|tojson }};
     const dividendCtx = document.getElementById('monthlyDividendChart')?.getContext('2d');
 
-    // 섹터 트리맵 차트
     if (sectorCtx && sectorData && sectorData.length > 0) {
         new Chart(sectorCtx, {
             type: 'treemap',
-            data: {
-                datasets: [{
-                    tree: sectorData,
-                    key: 'value',
-                    groups: ['sector'],
-                    backgroundColor: (ctx) => {
-                        const colors = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0', '#6f42c1'];
-                        if (ctx.type === 'dataset') return 'transparent';
-                        const index = ctx.dataIndex % colors.length;
-                        return colors[index];
-                    },
-                    labels: {
-                        display: true,
-                        color: 'white',
-                        font: { size: 14, weight: 'bold' },
-                        formatter(ctx) {
-                            if (ctx.type === 'data') {
-                                const item = ctx.dataset.data[ctx.dataIndex];
-                                const total = ctx.dataset.data.reduce((sum, d) => sum + d.v, 0);
-                                const percentage = (item.v / total * 100).toFixed(1);
-                                return [item.g, `$${item.v.toFixed(0)}`, `(${percentage}%)`];
-                            }
+            data: { datasets: [{
+                tree: sectorData, key: 'value', groups: ['sector'],
+                backgroundColor: (ctx) => {
+                    const colors = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0', '#6f42c1'];
+                    if (ctx.type === 'dataset') return 'transparent';
+                    return colors[ctx.dataIndex % colors.length];
+                },
+                labels: { display: true, color: 'white', font: { size: 14, weight: 'bold' },
+                    formatter(ctx) {
+                        if (ctx.type === 'data') {
+                            const item = ctx.dataset.data[ctx.dataIndex];
+                            const total = ctx.dataset.data.reduce((s, d) => s + d.v, 0);
+                            return [item.g, `$${item.v.toFixed(0)}`, `(${(item.v / total * 100).toFixed(1)}%)`];
                         }
                     }
-                }]
-            },
+                }
+            }] },
             options: { plugins: { legend: { display: false } } }
         });
     }
 
-    // 월별 예상 배당금 막대 그래프
-    if (dividendCtx && monthlyDividendData && monthlyDividendData.data.some(d => d > 0)) {
+    if (dividendCtx && monthlyData && monthlyData.data.some(d => d > 0)) {
         new Chart(dividendCtx, {
             type: 'bar',
-            data: {
-                labels: monthlyDividendData.labels,
-                datasets: [{
-                    label: '예상 배당금 ($)',
-                    data: monthlyDividendData.data,
-                    backgroundColor: 'rgba(25, 135, 84, 0.6)',
-                    borderColor: 'rgba(25, 135, 84, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                scales: { y: { beginAtZero: true, ticks: { callback: (v) => '$' + v.toFixed(0) } } }
-            }
+            data: { labels: monthlyData.labels, datasets: [{ label: '예상 배당금 ($)', data: monthlyData.data, backgroundColor: 'rgba(25, 135, 84, 0.7)' }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: (v) => '$' + v.toFixed(0) } } } }
         });
     }
 });
