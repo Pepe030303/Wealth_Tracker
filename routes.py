@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import func, extract
 from app import db, task_queue
 from tasks import update_all_dividends_for_user
-from models import User, Holding, Dividend, Trade, recalculate_holdings, calculate_dividend_metrics, get_dividend_allocation_data
+from models import User, Holding, Dividend, Trade, recalculate_holdings, calculate_dividend_metrics, get_dividend_allocation_data, get_dividend_months
 from stock_api import stock_api
 from flask_login import login_user, logout_user, current_user, login_required
 import logging
@@ -48,14 +48,13 @@ def signup():
     return render_template('signup.html')
 
 
-# --- 메인 애플리케이션 라우트 ---
-
+# --- 대시보드 라우트 수정 ---
 @main_bp.route('/')
 @login_required
 def dashboard():
     holdings = Holding.query.filter_by(user_id=current_user.id).all()
     if not holdings:
-        return render_template('dashboard.html', summary={}, sector_allocation=[])
+        return render_template('dashboard.html', summary={}, sector_allocation=[], monthly_dividend_data={'labels': [], 'data': []})
 
     symbols = {h.symbol for h in holdings}
     price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
@@ -64,30 +63,46 @@ def dashboard():
     total_investment = sum(h.quantity * h.purchase_price for h in holdings)
     total_current_value = 0
     sector_values = {}
-
+    
     for h in holdings:
         price_data = price_data_map.get(h.symbol)
-        current_price = price_data['price'] if price_data and price_data.get('price') is not None else h.purchase_price
+        current_price = price_data['price'] if price_data else h.purchase_price
         current_value = h.quantity * current_price
         total_current_value += current_value
-        
         profile = profile_data_map.get(h.symbol)
-        sector = profile['sector'] if profile and profile.get('sector') else 'N/A'
+        sector = profile['sector'] if profile else 'N/A'
         sector_values[sector] = sector_values.get(sector, 0) + current_value
 
     total_profit_loss = total_current_value - total_investment
-    total_return_percent = (total_profit_loss / total_investment * 100) if total_investment > 0 else 0
-
     summary = {
-        'total_investment': total_investment,
-        'total_current_value': total_current_value,
+        'total_investment': total_investment, 'total_current_value': total_current_value,
         'total_profit_loss': total_profit_loss,
-        'total_return_percent': total_return_percent
+        'total_return_percent': (total_profit_loss / total_investment * 100) if total_investment > 0 else 0
     }
-    
     sector_allocation = [{'sector': k, 'value': v} for k, v in sector_values.items()]
 
-    return render_template('dashboard.html', summary=summary, sector_allocation=sector_allocation)
+    # 월별 예상 배당금 계산 로직 추가
+    dividend_metrics = calculate_dividend_metrics(current_user.id)
+    monthly_totals = [0] * 12
+    month_map = {'Jan':0, 'Feb':1, 'Mar':2, 'Apr':3, 'May':4, 'Jun':5, 'Jul':6, 'Aug':7, 'Sep':8, 'Oct':9, 'Nov':10, 'Dec':11}
+    for symbol, metrics in dividend_metrics.items():
+        # 분기/월 배당금을 12개월로 분배
+        payout_months = get_dividend_months(symbol)
+        if payout_months:
+            monthly_amount = metrics['expected_annual_dividend'] / len(payout_months)
+            for month_str in payout_months:
+                if month_str in month_map:
+                    monthly_totals[month_map[month_str]] += monthly_amount
+    
+    monthly_dividend_data = {
+        'labels': [f"{i+1}월" for i in range(12)],
+        'data': monthly_totals
+    }
+
+    return render_template('dashboard.html', 
+                           summary=summary, 
+                           sector_allocation=sector_allocation,
+                           monthly_dividend_data=monthly_dividend_data)
 
 @main_bp.route('/holdings')
 @login_required
