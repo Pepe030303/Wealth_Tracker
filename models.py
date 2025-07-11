@@ -9,10 +9,11 @@ from app import db
 import logging
 import yfinance as yf
 import pandas as pd
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# --- (User, Trade, Holding 등 다른 모델들은 이전과 동일) ---
+# --- (다른 모델 클래스와 함수는 이전과 동일) ---
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), index=True, unique=True, nullable=False)
@@ -60,7 +61,6 @@ class DividendUpdateCache(db.Model):
     last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 def recalculate_holdings(user_id):
-    # 이 함수는 수정할 필요 없음
     Holding.query.filter_by(user_id=user_id).delete()
     symbols = db.session.query(Trade.symbol).filter_by(user_id=user_id).distinct().all()
     for (symbol,) in symbols:
@@ -83,7 +83,6 @@ def recalculate_holdings(user_id):
     db.session.commit()
 
 def calculate_dividend_metrics(user_id):
-    # 이 함수는 수정할 필요 없음
     holdings = Holding.query.filter_by(user_id=user_id).all()
     dividend_metrics = {}
     from stock_api import stock_api
@@ -102,7 +101,7 @@ def calculate_dividend_metrics(user_id):
                 else: dividend_yield = info.get('yield', 0) * 100
                 dividend_metrics[h.symbol] = {'expected_annual_dividend': expected_annual_dividend, 'dividend_yield': dividend_yield}
         except Exception as e:
-            logger.warning(f"{h.symbol}의 배당 지표 계산 실패: {e}")
+            logger.warning(f"({h.symbol}) 배당 지표 계산 실패: {e}")
             continue
     return dividend_metrics
 
@@ -110,51 +109,55 @@ def get_dividend_allocation_data(dividend_metrics):
     return [{'symbol': s, 'value': m['expected_annual_dividend']} for s, m in dividend_metrics.items() if m.get('expected_annual_dividend', 0) > 0]
 
 
-# --- 동적 배당 월 조회 기능 (최종 수정) ---
+# --- 동적 배당 월 조회 기능 (최종 디버깅 및 수정) ---
 
 DIVIDEND_MONTH_CACHE = {}
 MONTH_NUMBER_TO_NAME = {1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'}
 
 def get_dividend_months(symbol):
-    """
-    yfinance의 과거 배당락일(.actions)을 우선적으로 사용하여 배당 월을 정확하게 추정합니다.
-    """
     upper_symbol = symbol.upper()
     if upper_symbol in DIVIDEND_MONTH_CACHE:
         return DIVIDEND_MONTH_CACHE[upper_symbol]
 
-    paid_months = None
+    paid_months = set() # 중복을 허용하지 않는 set으로 변경
     try:
         ticker = yf.Ticker(upper_symbol)
         
-        # 1. 과거 배당락일(.actions)을 우선적으로 사용 (가장 안정적)
+        # 1. 과거 배당락일(.actions)을 우선적으로 사용
         actions = ticker.actions
-        if not actions.empty and 'Dividends' in actions.columns and actions['Dividends'].sum() > 0:
+        if actions is not None and not actions.empty and 'Dividends' in actions.columns:
             ex_dividend_dates = actions[actions['Dividends'] > 0].index
-            # 조회 기간을 18개월로 늘려 안정성 확보
-            start_date = pd.to_datetime(datetime.now() - timedelta(days=540))
-            ex_dividend_dates_naive = ex_dividend_dates.tz_localize(None)
-            recent_ex_dates = ex_dividend_dates_naive[ex_dividend_dates_naive > start_date]
-            if not recent_ex_dates.empty:
-                paid_months = sorted(list(recent_ex_dates.month.unique()))
+            
+            # --- 디버깅 로그 추가 ---
+            logger.info(f"[{upper_symbol}] yfinance .actions에서 가져온 배당락일: {ex_dividend_dates.month.tolist()}")
+            
+            # 시간대 정보 제거
+            ex_dividend_dates_naive = ex_dividend_dates.tz_convert(None) if ex_dividend_dates.tz is not None else ex_dividend_dates
+            
+            # 기간 필터링 없이 모든 과거 데이터의 월을 집계
+            for date in ex_dividend_dates_naive:
+                paid_months.add(date.month)
         
-        # 2. .actions에 정보가 없을 경우, .calendar로 폴백
-        if not paid_months:
-            if hasattr(ticker, 'calendar') and isinstance(ticker.calendar, pd.DataFrame) and not ticker.calendar.empty:
-                calendar_df = ticker.calendar.transpose()
-                if 'Ex-Dividend Date' in calendar_df.columns:
-                    next_ex_div_date = calendar_df.loc['Earnings', 'Ex-Dividend Date']
-                    if isinstance(next_ex_div_date, (datetime, pd.Timestamp)):
-                        base_month = next_ex_div_date.month
-                        # 분기 배당으로 일반화하여 추정
-                        paid_months = sorted([(base_month - 1 - 3 * i) % 12 + 1 for i in range(4)])
+        # 2. 로직 보강: 분기 배당주인데 월이 3개만 잡히는 경우 (예: 3, 6, 12)
+        if len(paid_months) == 3:
+            # 월 간의 차이를 계산
+            sorted_months = sorted(list(paid_months))
+            diffs = np.diff(sorted_months)
+            # 대부분의 차이가 3 (분기)인데, 하나만 다른 경우
+            if np.count_nonzero(diffs == 3) >= 1:
+                # 누락된 분기를 찾아 추가
+                for i in range(4):
+                    # 기준 월(예: 3월)에서 3개월씩 더해봄
+                    expected_month = (sorted_months[0] - 1 + 3 * i) % 12 + 1
+                    paid_months.add(expected_month)
+                logger.info(f"[{upper_symbol}] 분기 배당 보정 적용 후: {sorted(list(paid_months))}")
 
     except Exception as e:
         logger.warning(f"({upper_symbol}) 배당 월 정보 조회 실패: {e}")
-        paid_months = None
-
-    if paid_months:
-        month_names = [MONTH_NUMBER_TO_NAME.get(m, '') for m in paid_months]
+    
+    final_months = sorted(list(paid_months))
+    if final_months:
+        month_names = [MONTH_NUMBER_TO_NAME.get(m, '') for m in final_months]
         DIVIDEND_MONTH_CACHE[upper_symbol] = month_names
         return month_names
     else:
