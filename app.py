@@ -21,17 +21,19 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key-for-local-testing")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
+# SQLAlchemy가 'postgresql://...' URL을 자동으로 인식합니다.
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_recycle": 280, "pool_pre_ping": True}
 
+task_queue = None
 try:
     redis_url = os.environ.get('REDIS_URL')
-    if not redis_url: raise ValueError("REDIS_URL 환경 변수가 설정되지 않았습니다.")
+    if not redis_url:
+        raise ValueError("REDIS_URL 환경 변수가 설정되지 않았습니다.")
     conn = redis.from_url(redis_url)
     task_queue = Queue('wealth-tracker-tasks', connection=conn)
 except Exception as e:
     app.logger.error(f"Redis 연결 실패: {e}")
-    task_queue = None
 
 login_manager.init_app(app)
 login_manager.login_view = 'main.login'
@@ -44,16 +46,11 @@ def strftime_filter(dt, fmt='%Y-%m-%d'):
     if dt is None: return ""
     return dt.strftime(fmt)
 
-# --- Jinja2 필터에 한국어 배당 월 변환 추가 ---
 @app.template_filter('korean_dividend_months')
 def korean_dividend_months_filter(symbol):
     from models import get_dividend_months
     months = get_dividend_months(symbol)
-    month_map = {
-        'Jan': '1월', 'Feb': '2월', 'Mar': '3월', 'Apr': '4월',
-        'May': '5월', 'Jun': '6월', 'Jul': '7월', 'Aug': '8월',
-        'Sep': '9월', 'Oct': '10월', 'Nov': '11월', 'Dec': '12월'
-    }
+    month_map = {'Jan':'1월','Feb':'2월','Mar':'3월','Apr':'4월','May':'5월','Jun':'6월','Jul':'7월','Aug':'8월','Sep':'9월','Oct':'10월','Nov':'11월','Dec':'12월'}
     return [month_map.get(m, m) for m in months]
 
 db.init_app(app)
@@ -65,11 +62,8 @@ def load_user(user_id): return User.query.get(int(user_id))
 with app.app_context():
     import models
     db.create_all()
-
-    # --- EDGAR CIK 맵 로드를 앱 시작 시 수행 ---
     from stock_api import load_ticker_to_cik_map
     load_ticker_to_cik_map()
-    # ------------------------------------------
 
 from routes import main_bp
 app.register_blueprint(main_bp)
