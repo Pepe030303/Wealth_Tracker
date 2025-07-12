@@ -224,6 +224,7 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     transition: transform 0.3s ease;
     flex-shrink: 0;
+    background-color: var(--bs-tertiary-bg); /* 로고 로딩 중 배경색 */
 }
 
 .stock-logo:hover {
@@ -359,11 +360,16 @@
     font-weight: 500;
 }
 
-/* Company Name Styling */
+/* 🛠️ UI 개선: 회사명을 표시하기 위한 스타일 추가 */
 .company-name {
     font-size: 0.8rem;
     color: var(--bs-gray-600);
     font-weight: 400;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Responsive Adjustments */
