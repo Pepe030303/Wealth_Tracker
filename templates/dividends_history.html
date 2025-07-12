@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}배당금 내역 - Wealth Tracker{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="fas fa-receipt me-2"></i>배당금 입금 내역</h1>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card">
+             <div class="card-body text-center">
+                <h6 class="card-subtitle mb-2 text-muted">총 수령 배당금 (세전)</h6>
+                <h3 class="card-title fw-bold text-success">${{ "%.2f"|format(total_received) }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8 mb-4">
+        <div class="card bg-light-subtle border-secondary">
+             <div class="card-body">
+                <p class="mb-0 text-secondary">
+                    <i class="fas fa-info-circle me-1"></i>
+                    백그라운드에서 주기적으로 배당금 정보를 동기화합니다. 최신 정보를 보려면 잠시 후 페이지를 새로고침해주세요.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-history me-2"></i>
+            전체 입금 기록
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        {% if dividends_pagination.items %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>입금일</th>
+                            <th>종목</th>
+                            <th class="text-end">주당 배당금</th>
+                            <th class="text-end">총액 (세전)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for dividend in dividends_pagination.items %}
+                        <tr>
+                            <td>{{ dividend.dividend_date.strftime('%Y-%m-%d') }}</td>
+                            <td><strong>{{ dividend.symbol }}</strong></td>
+                            <td class="text-end">
+                                {% if dividend.amount_per_share %}
+                                    ${{ "%.4f"|format(dividend.amount_per_share) }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="text-end text-success fw-bold">+ ${{ "%.2f"|format(dividend.amount) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination -->
+            {% if dividends_pagination.has_prev or dividends_pagination.has_next %}
+            <div class="card-footer d-flex justify-content-center">
+                <nav>
+                    <ul class="pagination mb-0">
+                        <li class="page-item {% if not dividends_pagination.has_prev %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('main.dividends_history', page=dividends_pagination.prev_num) }}">이전</a>
+                        </li>
+                        {% for page_num in dividends_pagination.iter_pages() %}
+                            {% if page_num %}
+                                <li class="page-item {% if page_num == dividends_pagination.page %}active{% endif %}">
+                                    <a class="page-link" href="{{ url_for('main.dividends_history', page=page_num) }}">{{ page_num }}</a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                            {% endif %}
+                        {% endfor %}
+                        <li class="page-item {% if not dividends_pagination.has_next %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('main.dividends_history', page=dividends_pagination.next_num) }}">다음</a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+
+        {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-receipt fa-3x text-muted mb-3"></i>
+                <p class="text-muted">배당금 입금 기록이 없습니다.</p>
+                <p class="text-muted small">거래 기록을 추가하면, 시스템이 자동으로 배당금 내역을 찾아옵니다.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
