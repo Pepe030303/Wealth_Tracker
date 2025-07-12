@@ -1,3 +1,5 @@
+{# 📄 templates/dashboard.html #}
+
 {% extends "base.html" %}
 {% block title %}대시보드 - Wealth Tracker{% endblock %}
 {% block content %}
@@ -67,8 +69,12 @@
 {% endblock %}
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2.3.0/dist/chartjs-chart-treemap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    Chart.register(ChartDataLabels);
+
     const sectorData = {{ sector_allocation|tojson }};
     const sectorCtx = document.getElementById('sectorAllocationChart')?.getContext('2d');
     const monthlyData = {{ monthly_dividend_data|tojson }};
@@ -77,32 +83,92 @@ document.addEventListener('DOMContentLoaded', function () {
     if (sectorCtx && sectorData && sectorData.length > 0) {
         new Chart(sectorCtx, {
             type: 'treemap',
-            data: { datasets: [{
-                tree: sectorData, key: 'value', groups: ['sector'],
-                backgroundColor: (ctx) => {
-                    const colors = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0', '#6f42c1'];
-                    if (ctx.type === 'dataset') return 'transparent';
-                    return colors[ctx.dataIndex % colors.length];
-                },
-                labels: { display: true, color: 'white', font: { size: 14, weight: 'bold' },
-                    formatter(ctx) {
-                        if (ctx.type === 'data') {
-                            const item = ctx.dataset.data[ctx.dataIndex];
-                            const total = ctx.dataset.data.reduce((s, d) => s + d.v, 0);
-                            return [item.g, `$${item.v.toFixed(0)}`, `(${(item.v / total * 100).toFixed(1)}%)`];
+            data: { 
+                datasets: [{
+                    tree: sectorData,
+                    key: 'value',
+                    groups: ['sector'],
+                    backgroundColor: (ctx) => {
+                        const colors = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0', '#6f42c1', '#fd7e14'];
+                        if (ctx.type === 'dataset') return 'transparent';
+                        return colors[ctx.dataIndex % colors.length];
+                    },
+                    labels: {
+                        display: true,
+                        color: 'white',
+                        // 개선: 폰트 크기 14 -> 16으로 키워 가독성 향상
+                        font: { size: 16, weight: 'bold' },
+                        formatter(ctx) {
+                            if (ctx.type === 'data') {
+                                const item = ctx.dataset.data[ctx.dataIndex];
+                                const total = ctx.dataset.data.reduce((s, d) => s + d.v, 0);
+                                return [item.g, `$${item.v.toFixed(0)}`, `(${(item.v / total * 100).toFixed(1)}%)`];
+                            }
                         }
                     }
-                }
-            }] },
-            options: { plugins: { legend: { display: false } } }
+                }]
+            },
+            options: { 
+                plugins: { 
+                    legend: { display: false },
+                    // 개선: 툴팁에 포함된 종목 리스트 표시
+                    tooltip: {
+                        callbacks: {
+                            title: function(tooltipItems) {
+                                const item = tooltipItems[0].raw._data;
+                                return `${item.sector} | $${item.value.toFixed(2)}`;
+                            },
+                            label: function(context) {
+                                return ''; // 기본 라벨은 비움
+                            },
+                            afterBody: function(tooltipItems) {
+                                const item = tooltipItems[0].raw._data;
+                                const holdings = item.holdings || [];
+                                let holdingsText = ['\n--- Holdings ---'];
+                                holdings.forEach(h => {
+                                    const percentage = (h.value / item.value * 100).toFixed(1);
+                                    holdingsText.push(`${h.symbol}: $${h.value.toFixed(2)} (${percentage}%)`);
+                                });
+                                return holdingsText;
+                            }
+                        }
+                    }
+                } 
+            }
         });
     }
 
     if (dividendCtx && monthlyData && monthlyData.data.some(d => d > 0)) {
         new Chart(dividendCtx, {
             type: 'bar',
-            data: { labels: monthlyData.labels, datasets: [{ label: '예상 배당금 ($)', data: monthlyData.data, backgroundColor: 'rgba(25, 135, 84, 0.7)' }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: (v) => '$' + v.toFixed(0) } } } }
+            data: { 
+                labels: monthlyData.labels, 
+                datasets: [{ 
+                    label: '예상 배당금 ($)', 
+                    data: monthlyData.data, 
+                    backgroundColor: 'rgba(25, 135, 84, 0.7)' 
+                }] 
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                plugins: { 
+                    legend: { display: false },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'end',
+                        formatter: (value) => value > 0 ? '$' + value.toFixed(2) : null,
+                        color: '#adb5bd',
+                        font: { weight: 'bold' }
+                    }
+                }, 
+                scales: { 
+                    y: { 
+                        beginAtZero: true, 
+                        ticks: { callback: (v) => '$' + v.toFixed(0) } 
+                    } 
+                } 
+            }
         });
     }
 });
