@@ -21,8 +21,6 @@
                                 <tr>
                                     <td><strong class="fs-5">{{ symbol }}</strong></td>
                                     <td>
-                                        {# [에러 해결] 템플릿 필터를 사용하는 대신, 라우트에서 미리 계산한 'payout_months' 데이터를 사용 #}
-                                        {# 'korean_dividend_months' 필터는 이제 월 이름 리스트를 받아 한글로 변환하는 역할만 수행 #}
                                         {% set months_in_korean = metrics.payout_months | korean_dividend_months %}
                                         {% for month in months_in_korean %}
                                             <span class="badge bg-secondary me-1">{{ month }}</span>
@@ -52,7 +50,7 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header"><h5 class="card-title mb-0">월별 예상 배당금</h5></div>
-            <div class="card-body"><canvas id="monthlyDividendChart" style="height: 250px;"></canvas></div>
+            <div class="card-body"><canvas id="monthlyDividendChart" style="height: 300px;"></canvas></div>
         </div>
     </div>
 </div>
@@ -70,72 +68,94 @@ document.addEventListener('DOMContentLoaded', function () {
     const monthlyCtx = document.getElementById('monthlyDividendChart')?.getContext('2d');
 
     if (allocationCtx && allocationData && allocationData.length > 0) {
+        // ... (배당 비중 파이 차트 로직은 변경 없음) ...
         const totalDividend = allocationData.reduce((sum, item) => sum + item.value, 0);
-
         new Chart(allocationCtx, {
             type: 'pie', 
-            data: { 
-                labels: allocationData.map(i => i.symbol), 
-                datasets: [{ 
-                    data: allocationData.map(i => i.value), 
-                    backgroundColor: ['#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2'], 
-                    borderColor: '#343a40' 
-                }] 
-            },
-            options: { 
-                responsive: true, 
-                maintainAspectRatio: false, 
-                plugins: { 
-                    legend: { position: 'right' },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                const label = context.label || '';
-                                const value = context.parsed;
-                                const percentage = (value / totalDividend * 100).toFixed(2);
-                                return ` ${label}: $${value.toFixed(2)} (${percentage}%)`;
-                            }
-                        }
-                    }
-                } 
-            }
+            data: { labels: allocationData.map(i => i.symbol), datasets: [{ data: allocationData.map(i => i.value), backgroundColor: ['#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2'], borderColor: '#343a40' }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' }, tooltip: { callbacks: { label: function(context) { const label = context.label || ''; const value = context.parsed; const percentage = (value / totalDividend * 100).toFixed(2); return ` ${label}: $${value.toFixed(2)} (${percentage}%)`; } } } } }
         });
     }
 
-    if (monthlyCtx && monthlyData && monthlyData.data.some(d => d > 0)) {
+    if (monthlyCtx && monthlyData && monthlyData.datasets.length > 0) {
+        // [차트 개선] 월별 배당금 차트 로직 전면 수정
         new Chart(monthlyCtx, {
             type: 'bar', 
             data: { 
                 labels: monthlyData.labels, 
-                datasets: [{ 
-                    label: '예상 배당금 ($)', 
-                    data: monthlyData.data, 
-                    backgroundColor: 'rgba(25, 135, 84, 0.7)' 
-                }] 
+                datasets: monthlyData.datasets
             },
             options: { 
                 responsive: true, 
-                maintainAspectRatio: false, 
+                maintainAspectRatio: false,
+                // 개선: 라벨이 잘리지 않도록 상단에 여백 추가
+                layout: {
+                    padding: {
+                        top: 30
+                    }
+                },
                 plugins: { 
-                    legend: { display: false },
+                    legend: { display: true, position: 'bottom' },
+                    // 개선: 데이터 라벨(총액) 설정
                     datalabels: {
-                        anchor: 'end',
-                        align: 'end',
-                        formatter: (value, context) => {
-                            return value > 0 ? '$' + value.toFixed(2) : null;
+                        // 각 스택 그룹의 최상단에만 총액을 표시하기 위한 로직
+                        display: context => {
+                            const dataset = context.chart.data.datasets[context.datasetIndex];
+                            const value = dataset.data[context.dataIndex];
+                            // 마지막 데이터셋의 0이 아닌 값에만 라벨 표시
+                            return context.datasetIndex === context.chart.data.datasets.length - 1 && value > 0;
                         },
+                        // 스택의 총합을 계산하여 표시
+                        formatter: (value, context) => {
+                            const datasets = context.chart.data.datasets;
+                            let total = 0;
+                            datasets.forEach(dataset => {
+                                total += dataset.data[context.dataIndex];
+                            });
+                            return total > 0 ? '$' + total.toFixed(2) : null;
+                        },
+                        anchor: 'end',
+                        align: 'top',
                         color: '#adb5bd',
-                        font: {
-                            weight: 'bold'
+                        font: { weight: 'bold' }
+                    },
+                    // 개선: 상세 툴팁 설정
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            // 툴팁 제목: '2025년 12월'
+                            title: function(tooltipItems) {
+                                return `2025년 ${tooltipItems[0].label}`;
+                            },
+                            // 툴팁 본문: 종목명, 금액, 비중
+                            label: function(context) {
+                                const label = context.dataset.label || '';
+                                const value = context.parsed.y;
+                                if (value === 0) return null; // 0인 항목은 툴팁에서 제외
+
+                                const total = context.chart.data.datasets.reduce((sum, ds) => sum + ds.data[context.dataIndex], 0);
+                                const percentage = total > 0 ? (value / total * 100).toFixed(1) : 0;
+                                
+                                return `${label}: $${value.toFixed(2)} (${percentage}%)`;
+                            },
+                            // 툴팁 하단: '총액'
+                            footer: function(tooltipItems) {
+                                let total = 0;
+                                tooltipItems.forEach(item => {
+                                    total += item.parsed.y;
+                                });
+                                return '총액: $' + total.toFixed(2);
+                            }
                         }
                     }
                 }, 
                 scales: { 
+                    x: { stacked: true }, // x축 스택 활성화
                     y: { 
+                        stacked: true, // y축 스택 활성화
                         beginAtZero: true, 
-                        ticks: { 
-                            callback: (v) => '$' + v.toFixed(0) 
-                        } 
+                        ticks: { callback: (v) => '$' + v.toFixed(0) } 
                     } 
                 } 
             }
@@ -143,4 +163,4 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 </script>
-{% endblock %}
+{% endblock %}```
