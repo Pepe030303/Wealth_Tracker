@@ -1,3 +1,5 @@
+{# 📄 templates/dividends.html #}
+
 {% extends "base.html" %}
 {% block title %}예상 배당금 - Wealth Tracker{% endblock %}
 
@@ -19,8 +21,9 @@
                                 <tr>
                                     <td><strong class="fs-5">{{ symbol }}</strong></td>
                                     <td>
-                                        {% set months = symbol | korean_dividend_months %}
-                                        {% for month in months %}<span class="badge bg-secondary me-1">{{ month }}</span>{% endfor %}
+                                        {# 이제 get_dividend_months는 딕셔너리를 반환 #}
+                                        {% set months = (symbol | get_dividend_months).months %}
+                                        {% for month in months %}<span class="badge bg-secondary me-1">{{ month | korean_dividend_months }}</span>{% endfor %}
                                     </td>
                                     <td class="text-end">${{ "%.2f"|format(metrics.expected_annual_dividend) }}</td>
                                     <td class="text-end text-success fw-bold">{{ "%.2f"|format(metrics.dividend_yield) }}%</td>
@@ -53,24 +56,91 @@
 {% endblock %}
 
 {% block scripts %}
+{# 개선: 막대그래프에 숫자(데이터 라벨)를 표시하기 위한 플러그인 추가 #}
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    // 플러그인을 전역으로 등록
+    Chart.register(ChartDataLabels);
+
     const allocationData = {{ allocation_data|tojson }};
     const allocationCtx = document.getElementById('dividendAllocationChart')?.getContext('2d');
     const monthlyData = {{ monthly_dividend_data|tojson }};
     const monthlyCtx = document.getElementById('monthlyDividendChart')?.getContext('2d');
 
     if (allocationCtx && allocationData && allocationData.length > 0) {
+        const totalDividend = allocationData.reduce((sum, item) => sum + item.value, 0);
+
         new Chart(allocationCtx, {
-            type: 'pie', data: { labels: allocationData.map(i => i.symbol), datasets: [{ data: allocationData.map(i => i.value), backgroundColor: ['#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6f42c1'], borderColor: '#343a40' }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+            type: 'pie', 
+            data: { 
+                labels: allocationData.map(i => i.symbol), 
+                datasets: [{ 
+                    data: allocationData.map(i => i.value), 
+                    backgroundColor: ['#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2'], 
+                    borderColor: '#343a40' 
+                }] 
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                plugins: { 
+                    legend: { position: 'right' },
+                    // 개선: 툴팁에 종목명, 배당금, 비중(%) 표시
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed;
+                                const percentage = (value / totalDividend * 100).toFixed(2);
+                                return ` ${label}: $${value.toFixed(2)} (${percentage}%)`;
+                            }
+                        }
+                    }
+                } 
+            }
         });
     }
 
     if (monthlyCtx && monthlyData && monthlyData.data.some(d => d > 0)) {
         new Chart(monthlyCtx, {
-            type: 'bar', data: { labels: monthlyData.labels, datasets: [{ label: '예상 배당금 ($)', data: monthlyData.data, backgroundColor: 'rgba(25, 135, 84, 0.7)' }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: (v) => '$' + v.toFixed(0) } } } }
+            type: 'bar', 
+            data: { 
+                labels: monthlyData.labels, 
+                datasets: [{ 
+                    label: '예상 배당금 ($)', 
+                    data: monthlyData.data, 
+                    backgroundColor: 'rgba(25, 135, 84, 0.7)' 
+                }] 
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                plugins: { 
+                    legend: { display: false },
+                    // 개선: 막대그래프 상단에 배당금 숫자 표시
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'end',
+                        formatter: (value, context) => {
+                            // 값이 0보다 클 때만 숫자를 표시
+                            return value > 0 ? '$' + value.toFixed(2) : null;
+                        },
+                        color: '#adb5bd', // 숫자 색상
+                        font: {
+                            weight: 'bold'
+                        }
+                    }
+                }, 
+                scales: { 
+                    y: { 
+                        beginAtZero: true, 
+                        ticks: { 
+                            callback: (v) => '$' + v.toFixed(0) 
+                        } 
+                    } 
+                } 
+            }
         });
     }
 });
