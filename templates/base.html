@@ -31,8 +31,14 @@
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'main.holdings' %}active{% endif %}" href="{{ url_for('main.holdings') }}"><i class="fas fa-wallet me-1"></i>보유 종목</a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'main.dividends' %}active{% endif %}" href="{{ url_for('main.dividends') }}"><i class="fas fa-coins me-1"></i>배당금</a>
+                        <li class="nav-item dropdown">
+                             <a class="nav-link dropdown-toggle {% if 'dividend' in request.endpoint %}active{% endif %}" href="#" id="dividendDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-coins me-1"></i>배당금
+                            </a>
+                            <ul class="dropdown-menu" aria-labelledby="dividendDropdown">
+                                <li><a class="dropdown-item" href="{{ url_for('main.dividends') }}">예상 배당금</a></li>
+                                <li><a class="dropdown-item" href="{{ url_for('main.dividends_history') }}">배당금 내역</a></li>
+                            </ul>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link {% if request.endpoint == 'main.allocation' %}active{% endif %}" href="{{ url_for('main.allocation') }}"><i class="fas fa-chart-pie me-1"></i>포트폴리오</a>
@@ -74,7 +80,7 @@
 
     <footer class="bg-dark text-white-50 mt-auto py-3">
         <div class="container text-center">
-            <small>© 2024 Wealth Tracker. All Rights Reserved.</small>
+            <small>© 2025 Wealth Tracker. All Rights Reserved.</small>
         </div>
     </footer>
 
