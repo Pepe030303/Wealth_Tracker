@@ -21,9 +21,12 @@
                                 <tr>
                                     <td><strong class="fs-5">{{ symbol }}</strong></td>
                                     <td>
-                                        {# 이제 get_dividend_months는 딕셔너리를 반환 #}
-                                        {% set months = (symbol | get_dividend_months).months %}
-                                        {% for month in months %}<span class="badge bg-secondary me-1">{{ month | korean_dividend_months }}</span>{% endfor %}
+                                        {# [에러 해결] 템플릿 필터를 사용하는 대신, 라우트에서 미리 계산한 'payout_months' 데이터를 사용 #}
+                                        {# 'korean_dividend_months' 필터는 이제 월 이름 리스트를 받아 한글로 변환하는 역할만 수행 #}
+                                        {% set months_in_korean = metrics.payout_months | korean_dividend_months %}
+                                        {% for month in months_in_korean %}
+                                            <span class="badge bg-secondary me-1">{{ month }}</span>
+                                        {% endfor %}
                                     </td>
                                     <td class="text-end">${{ "%.2f"|format(metrics.expected_annual_dividend) }}</td>
                                     <td class="text-end text-success fw-bold">{{ "%.2f"|format(metrics.dividend_yield) }}%</td>
@@ -56,11 +59,9 @@
 {% endblock %}
 
 {% block scripts %}
-{# 개선: 막대그래프에 숫자(데이터 라벨)를 표시하기 위한 플러그인 추가 #}
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    // 플러그인을 전역으로 등록
     Chart.register(ChartDataLabels);
 
     const allocationData = {{ allocation_data|tojson }};
@@ -86,7 +87,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 maintainAspectRatio: false, 
                 plugins: { 
                     legend: { position: 'right' },
-                    // 개선: 툴팁에 종목명, 배당금, 비중(%) 표시
                     tooltip: {
                         callbacks: {
                             label: function(context) {
@@ -118,15 +118,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 maintainAspectRatio: false, 
                 plugins: { 
                     legend: { display: false },
-                    // 개선: 막대그래프 상단에 배당금 숫자 표시
                     datalabels: {
                         anchor: 'end',
                         align: 'end',
                         formatter: (value, context) => {
-                            // 값이 0보다 클 때만 숫자를 표시
                             return value > 0 ? '$' + value.toFixed(2) : null;
                         },
-                        color: '#adb5bd', // 숫자 색상
+                        color: '#adb5bd',
                         font: {
                             weight: 'bold'
                         }
