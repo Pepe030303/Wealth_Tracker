@@ -6,16 +6,16 @@ from sqlalchemy import func
 from app import db, task_queue
 from tasks import update_all_dividends_for_user
 from models import User, Holding, Dividend, Trade, recalculate_holdings
-from utils import calculate_dividend_metrics, get_dividend_allocation_data, get_dividend_months
+from utils import get_dividend_allocation_data # get_dividend_months는 이제 서비스 내부에서만 사용
 from stock_api import stock_api, US_STOCKS_LIST
+from services.portfolio_service import get_portfolio_analysis_data # 서비스 계층 import
 from flask_login import login_user, logout_user, current_user, login_required
 import logging
 
 logger = logging.getLogger(__name__)
 main_bp = Blueprint('main', __name__)
 
-# ... (login, logout, signup 등 다른 라우트는 변경 없음) ...
-
+# ... (login, logout, signup 등 인증 관련 라우트는 변경 없음) ...
 @main_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated: return redirect(url_for('main.dashboard'))
@@ -49,77 +49,47 @@ def signup():
     return render_template('signup.html')
 
 
-def get_monthly_dividend_distribution(dividend_metrics):
-    monthly_totals = [0] * 12
-    month_map = {'Jan':0, 'Feb':1, 'Mar':2, 'Apr':3, 'May':4, 'Jun':5, 'Jul':6, 'Aug':7, 'Sep':8, 'Oct':9, 'Nov':10, 'Dec':11}
-    
-    for symbol, metrics in dividend_metrics.items():
-        dividend_info = get_dividend_months(symbol)
-        payout_months = dividend_info.get("months", [])
-        payout_count = dividend_info.get("count", 0)
-
-        if payout_months and payout_count > 0 and metrics.get('expected_annual_dividend'):
-            amount_per_payout = metrics['expected_annual_dividend'] / payout_count
-            
-            for month_str in payout_months:
-                if month_str in month_map:
-                    monthly_totals[month_map[month_str]] += amount_per_payout
-    
-    return {'labels': [f"{i+1}월" for i in range(12)], 'data': [round(m, 2) for m in monthly_totals]}
-
 @main_bp.route('/')
 @login_required
 def dashboard():
-    holdings = Holding.query.filter_by(user_id=current_user.id).all()
-    if not holdings:
-        return render_template('dashboard.html', summary={}, sector_allocation=[], monthly_dividend_data={'labels': [], 'data': []})
-
-    symbols = {h.symbol for h in holdings}
-    price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
-    profile_data_map = {s: stock_api.get_stock_profile(s) for s in symbols}
+    # 개선: 서비스 계층을 호출하여 모든 포트폴리오 데이터를 한 번에 가져옴
+    portfolio_data = get_portfolio_analysis_data(current_user.id)
     
-    dividend_metrics = calculate_dividend_metrics(holdings, price_data_map)
+    if not portfolio_data:
+        return render_template('dashboard.html', summary={}, sector_allocation=[], monthly_dividend_data={})
 
-    total_investment = sum(h.quantity * h.purchase_price for h in holdings)
-    total_current_value = sum(h.quantity * (price_data_map.get(h.symbol, {}).get('price') or h.purchase_price) for h in holdings)
-    
-    sector_details = {}
-    for h in holdings:
-        profile = profile_data_map.get(h.symbol, {}); 
-        sector = profile.get('sector', 'N/A')
-        current_value = h.quantity * (price_data_map.get(h.symbol, {}).get('price') or h.purchase_price)
-        
-        if sector not in sector_details:
-            sector_details[sector] = {'total_value': 0, 'holdings': []}
-            
-        sector_details[sector]['total_value'] += current_value
-        sector_details[sector]['holdings'].append({'symbol': h.symbol, 'value': current_value})
+    return render_template('dashboard.html', 
+                           summary=portfolio_data['summary'], 
+                           sector_allocation=portfolio_data['sector_allocation'], 
+                           monthly_dividend_data=portfolio_data['monthly_dividend_data'])
 
-    sector_allocation = [
-        {
-            'sector': sector, 
-            'value': details['total_value'],
-            'holdings': sorted(details['holdings'], key=lambda x: x['value'], reverse=True)
-        } 
-        for sector, details in sector_details.items()
-    ]
+@main_bp.route('/dividends')
+@login_required
+def dividends():
+    # 개선: 서비스 계층을 호출하여 코드 중복 제거
+    portfolio_data = get_portfolio_analysis_data(current_user.id)
+
+    if not portfolio_data:
+        return render_template('dividends.html', dividend_metrics={}, allocation_data=[], monthly_dividend_data={})
     
-    total_profit_loss = total_current_value - total_investment
-    summary = {
-        'total_investment': total_investment, 'total_current_value': total_current_value,
-        'total_profit_loss': total_profit_loss,
-        'total_return_percent': (total_profit_loss / total_investment * 100) if total_investment > 0 else 0
-    }
-    monthly_dividend_data = get_monthly_dividend_distribution(dividend_metrics)
-    return render_template('dashboard.html', summary=summary, sector_allocation=sector_allocation, monthly_dividend_data=monthly_dividend_data)
+    # 배당 비중 데이터는 여기서 따로 계산
+    allocation_data = get_dividend_allocation_data(portfolio_data['dividend_metrics'])
+
+    return render_template('dividends.html',
+                           dividend_metrics=portfolio_data['dividend_metrics'],
+                           allocation_data=allocation_data,
+                           monthly_dividend_data=portfolio_data['monthly_dividend_data'])
 
 @main_bp.route('/holdings')
 @login_required
 def holdings():
     holdings = Holding.query.filter_by(user_id=current_user.id).order_by(Holding.symbol).all()
     if not holdings: return render_template('holdings.html', holdings_data=[])
+    
+    # holdings 페이지는 API 호출이 많으므로 캐싱의 이점을 크게 받음
     symbols = {h.symbol for h in holdings}
     price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
+    
     holdings_data = []
     for h in holdings:
         price_data = price_data_map.get(h.symbol)
@@ -134,6 +104,7 @@ def holdings():
         })
     return render_template('holdings.html', holdings_data=holdings_data)
 
+# ... (trades, dividends_history, allocation 등 다른 라우트는 변경 없음) ...
 @main_bp.route('/trades')
 @login_required
 def trades():
@@ -172,42 +143,14 @@ def delete_trade(trade_id):
     flash(f'{trade.symbol} 거래가 삭제되었습니다.', 'success')
     return redirect(url_for('main.trades'))
 
-@main_bp.route('/dividends')
-@login_required
-def dividends():
-    holdings = Holding.query.filter_by(user_id=current_user.id).all()
-    if not holdings:
-        return render_template('dividends.html', dividend_metrics={}, allocation_data=[], monthly_dividend_data={})
-
-    symbols = {h.symbol for h in holdings}
-    price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
-    
-    dividend_metrics = calculate_dividend_metrics(holdings, price_data_map)
-    
-    # [에러 해결] 템플릿의 부담을 줄이기 위해, 라우트에서 배당 월 정보를 미리 계산하여 전달
-    for symbol, metrics in dividend_metrics.items():
-        dividend_info = get_dividend_months(symbol)
-        metrics['payout_months'] = dividend_info.get("months", [])
-    
-    allocation_data = get_dividend_allocation_data(dividend_metrics)
-    monthly_dividend_data = get_monthly_dividend_distribution(dividend_metrics)
-
-    return render_template('dividends.html',
-                           dividend_metrics=dividend_metrics,
-                           allocation_data=allocation_data,
-                           monthly_dividend_data=monthly_dividend_data)
-
 @main_bp.route('/dividends/history')
 @login_required
 def dividends_history():
     if task_queue:
         task_queue.enqueue(update_all_dividends_for_user, current_user.id, job_timeout='10m')
-
     page = request.args.get('page', 1, type=int)
     dividends_pagination = Dividend.query.filter_by(user_id=current_user.id).order_by(Dividend.dividend_date.desc()).paginate(page=page, per_page=20, error_out=False)
-    
     total_received = db.session.query(func.sum(Dividend.amount)).filter_by(user_id=current_user.id).scalar() or 0
-    
     return render_template('dividends_history.html', 
                            dividends_pagination=dividends_pagination,
                            total_received=total_received)
@@ -230,14 +173,8 @@ def allocation():
 @login_required
 def search_stocks():
     query = request.args.get('q', '').upper()
-    if not query:
-        return jsonify([])
-    
-    results = [
-        stock for stock in US_STOCKS_LIST 
-        if query in stock['ticker'].upper() or query in stock['name'].upper()
-    ]
-    
+    if not query: return jsonify([])
+    results = [stock for stock in US_STOCKS_LIST if query in stock['ticker'].upper() or query in stock['name'].upper()]
     return jsonify(results[:10])
 
 @main_bp.route('/stock/<string:symbol>')
@@ -247,11 +184,9 @@ def stock_detail(symbol):
     profile = stock_api.get_stock_profile(symbol)
     price_data = stock_api.get_stock_price(symbol)
     price_history = stock_api.get_price_history(symbol, period='6mo')
-
     if not price_data or not price_history:
         flash(f'{symbol} 종목 정보를 가져오는 데 실패했습니다.', 'error')
         return redirect(request.referrer or url_for('main.dashboard'))
-
     return render_template('stock_detail.html', 
                            symbol=symbol,
                            profile=profile,
