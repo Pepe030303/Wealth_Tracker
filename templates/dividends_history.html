@@ -1,3 +1,5 @@
+{# 📄 templates/dividends_history.html #}
+
 {% extends "base.html" %}
 {% block title %}배당금 내역 - Wealth Tracker{% endblock %}
 
@@ -24,7 +26,7 @@
              <div class="card-body">
                 <p class="mb-0 text-secondary">
                     <i class="fas fa-info-circle me-1"></i>
-                    백그라운드에서 주기적으로 배당금 정보를 동기화합니다. 최신 정보를 보려면 잠시 후 페이지를 새로고침해주세요.
+                    이 내역은 <strong>배당락일 기준 보유 수량</strong>으로 계산됩니다. 백그라운드에서 주기적으로 업데이트되니, 최신 정보를 보려면 잠시 후 페이지를 새로고침해주세요.
                 </p>
             </div>
         </div>
@@ -45,8 +47,10 @@
                 <table class="table table-hover mb-0">
                     <thead>
                         <tr>
-                            <th>입금일</th>
                             <th>종목</th>
+                            {# [개선] 배당락일 컬럼 추가 #}
+                            <th>배당락일 (Ex-Date)</th>
+                            <th>지급일 (Pay Date)</th>
                             <th class="text-end">주당 배당금</th>
                             <th class="text-end">총액 (세전)</th>
                         </tr>
@@ -54,8 +58,15 @@
                     <tbody>
                         {% for dividend in dividends_pagination.items %}
                         <tr>
-                            <td>{{ dividend.dividend_date.strftime('%Y-%m-%d') }}</td>
                             <td><strong>{{ dividend.symbol }}</strong></td>
+                            <td>
+                                {% if dividend.ex_dividend_date %}
+                                    {{ dividend.ex_dividend_date.strftime('%Y-%m-%d') }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ dividend.dividend_date.strftime('%Y-%m-%d') }}</td>
                             <td class="text-end">
                                 {% if dividend.amount_per_share %}
                                     ${{ "%.4f"|format(dividend.amount_per_share) }}
