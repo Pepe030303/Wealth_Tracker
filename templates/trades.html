@@ -10,12 +10,15 @@
     </div>
 </div>
 
-<!-- 거래 요약은 생략하고 바로 전체 기록으로 -->
-
 <div class="row">
     <div class="col-12">
         <div class="card">
-            <div class="card-header"><h5 class="card-title mb-0"><i class="fas fa-history me-2"></i>전체 거래 기록</h5></div>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0"><i class="fas fa-history me-2"></i>전체 거래 기록</h5>
+                <div class="w-50">
+                     <input type="text" id="tradeSearch" class="form-control form-control-sm" placeholder="종목 심볼로 검색...">
+                </div>
+            </div>
             <div class="card-body p-0">
                 {% if trades %}
                     <div class="table-responsive">
@@ -23,11 +26,11 @@
                             <thead>
                                 <tr><th>거래일</th><th>종목</th><th>구분</th><th>수량</th><th>가격</th><th>총액</th><th class="text-end">작업</th></tr>
                             </thead>
-                            <tbody>
+                            <tbody id="tradesTableBody">
                                 {% for trade in trades %}
                                 <tr>
                                     <td>{{ trade.trade_date.strftime('%Y-%m-%d') }}</td>
-                                    <td><strong>{{ trade.symbol }}</strong></td>
+                                    <td class="trade-symbol"><strong>{{ trade.symbol }}</strong></td>
                                     <td>
                                         <span class="badge {% if trade.trade_type == 'buy' %}bg-success-subtle text-success-emphasis{% else %}bg-danger-subtle text-danger-emphasis{% endif %}">
                                             {% if trade.trade_type == 'buy' %}매수{% else %}매도{% endif %}
@@ -35,7 +38,6 @@
                                     </td>
                                     <td>{{ trade.quantity }}</td>
                                     <td>${{ "%.2f"|format(trade.price) }}</td>
-                                    <!-- 총액 부호 및 색상 수정 -->
                                     <td>${{ "%.2f"|format(trade.quantity * trade.price) }}</td>
                                     <td class="text-end">
                                         <a href="{{ url_for('main.delete_trade', trade_id=trade.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('이 거래를 삭제하시겠습니까? 보유 종목이 재계산됩니다.')">
@@ -82,9 +84,33 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Symbol to uppercase
     document.getElementById('symbol')?.addEventListener('input', (e) => e.target.value = e.target.value.toUpperCase());
+    
+    // Set default date to today
     const dateInput = document.getElementById('trade_date');
     if(dateInput && !dateInput.value) { dateInput.valueAsDate = new Date(); }
+
+    // Live search for trades
+    const searchInput = document.getElementById('tradeSearch');
+    const tableBody = document.getElementById('tradesTableBody');
+    if (searchInput && tableBody) {
+        searchInput.addEventListener('keyup', function() {
+            const searchTerm = searchInput.value.toUpperCase();
+            const rows = tableBody.getElementsByTagName('tr');
+            for (let i = 0; i < rows.length; i++) {
+                const symbolCell = rows[i].querySelector('.trade-symbol');
+                if (symbolCell) {
+                    const symbolText = symbolCell.textContent || symbolCell.innerText;
+                    if (symbolText.toUpperCase().indexOf(searchTerm) > -1) {
+                        rows[i].style.display = "";
+                    } else {
+                        rows[i].style.display = "none";
+                    }
+                }
+            }
+        });
+    }
 });
 </script>
 {% endblock %}
