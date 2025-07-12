@@ -6,7 +6,7 @@ from sqlalchemy import func
 from app import db, task_queue
 from tasks import update_all_dividends_for_user
 from models import User, Holding, Dividend, Trade, recalculate_holdings
-from utils import get_dividend_allocation_data, get_dividend_months
+from utils import get_dividend_allocation_data
 from stock_api import stock_api, US_STOCKS_LIST
 from services.portfolio_service import get_portfolio_analysis_data
 from flask_login import login_user, logout_user, current_user, login_required
@@ -66,37 +66,43 @@ def dividends():
     portfolio_data = get_portfolio_analysis_data(current_user.id)
     if not portfolio_data:
         return render_template('dividends.html', dividend_metrics={}, allocation_data=[], monthly_dividend_data={})
-    
-    # 배당 비중 데이터 계산
     allocation_data = get_dividend_allocation_data(portfolio_data['dividend_metrics'])
-
     return render_template('dividends.html',
                            dividend_metrics=portfolio_data['dividend_metrics'],
                            allocation_data=allocation_data,
                            monthly_dividend_data=portfolio_data['monthly_dividend_data'])
 
-# ... (holdings, trades, etc. routes are unchanged) ...
 @main_bp.route('/holdings')
 @login_required
 def holdings():
     holdings = Holding.query.filter_by(user_id=current_user.id).order_by(Holding.symbol).all()
     if not holdings: return render_template('holdings.html', holdings_data=[])
+    
     symbols = {h.symbol for h in holdings}
     price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
+    
     holdings_data = []
     for h in holdings:
         price_data = price_data_map.get(h.symbol)
         current_price = price_data['price'] if price_data else h.purchase_price
+        
+        # [개선] 템플릿에서 필요한 모든 데이터를 여기서 계산하여 전달
+        total_cost = h.quantity * h.purchase_price
         current_value = h.quantity * current_price
+        profit_loss = current_value - total_cost
+        profit_loss_percent = (profit_loss / total_cost) * 100 if total_cost > 0 else 0
+
         holdings_data.append({
             'holding': h,
             'current_price': current_price,
+            'total_cost': total_cost,
             'current_value': current_value,
-            'profit_loss': current_value - (h.quantity * h.purchase_price),
-            'profit_loss_percent': (current_value - (h.quantity * h.purchase_price)) / (h.quantity * h.purchase_price) * 100 if h.purchase_price > 0 else 0,
+            'profit_loss': profit_loss,
+            'profit_loss_percent': profit_loss_percent,
         })
     return render_template('holdings.html', holdings_data=holdings_data)
 
+# ... (trades, etc. routes are unchanged) ...
 @main_bp.route('/trades')
 @login_required
 def trades():
