@@ -50,6 +50,12 @@ DIVIDEND_MONTH_CACHE = {}
 MONTH_NUMBER_TO_NAME = {1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'}
 
 def get_dividend_months(symbol):
+    """
+    [TLT 배당 문제 해결]
+    기존: 배당 월 목록만 반환
+    변경: 배당 월 목록과 '연간 실제 배당 횟수'를 함께 반환하여, 
+          한 달에 여러 번 배당하는 경우(특별 배당 등)를 정확히 계산할 수 있도록 함.
+    """
     upper_symbol = symbol.upper()
     if upper_symbol in DIVIDEND_MONTH_CACHE: return DIVIDEND_MONTH_CACHE[upper_symbol]
 
@@ -61,23 +67,28 @@ def get_dividend_months(symbol):
             
             ex_dividend_dates_naive = ex_dividend_dates.tz_convert(None) if ex_dividend_dates.tz is not None else ex_dividend_dates
             
-            start_date = pd.to_datetime(datetime.now() - timedelta(days=540))
-            recent_ex_dates = ex_dividend_dates_naive[ex_dividend_dates_naive > start_date]
+            # 최근 1년 데이터만 사용
+            one_year_ago = datetime.now() - timedelta(days=365)
+            recent_ex_dates = ex_dividend_dates_naive[ex_dividend_dates_naive > pd.to_datetime(one_year_ago)]
             
             if not recent_ex_dates.empty:
+                # 연간 배당 횟수 (예: TLT는 12가 아닌 13 이상이 될 수 있음)
+                dividend_count_last_year = len(recent_ex_dates)
+                # 배당금을 지급한 월 목록 (중복 제거)
                 paid_months = sorted(list(set(recent_ex_dates.month)))
-                
-                if len(paid_months) > 0 and len(paid_months) < 4:
-                    intervals = [j-i for i, j in zip(paid_months[:-1], paid_months[1:])]
-                    if all(i % 3 == 0 for i in intervals):
-                        if any(m in [3,6,9,12] for m in paid_months):
-                            paid_months = [3, 6, 9, 12]
 
                 month_names = [MONTH_NUMBER_TO_NAME.get(m, '') for m in paid_months]
-                DIVIDEND_MONTH_CACHE[upper_symbol] = month_names
-                return month_names
+                
+                result = {
+                    "months": month_names,
+                    "count": dividend_count_last_year
+                }
+                DIVIDEND_MONTH_CACHE[upper_symbol] = result
+                return result
     except Exception as e:
         logger.warning(f"({upper_symbol}) 배당 월 정보 조회 실패: {e}")
 
-    DIVIDEND_MONTH_CACHE[upper_symbol] = []
-    return []
+    # 실패하거나 배당 정보가 없는 경우 기본값 반환
+    result = {"months": [], "count": 0}
+    DIVIDEND_MONTH_CACHE[upper_symbol] = result
+    return result
