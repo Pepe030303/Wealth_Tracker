@@ -1,4 +1,4 @@
-# models.py
+# 📄 models.py
 
 from datetime import datetime
 from sqlalchemy import func, extract
@@ -39,8 +39,16 @@ class Dividend(db.Model):
     symbol = db.Column(db.String(20), nullable=False, index=True)
     amount = db.Column(db.Float, nullable=False)
     amount_per_share = db.Column(db.Float, nullable=True)
-    dividend_date = db.Column(db.Date, nullable=False)
+    dividend_date = db.Column(db.Date, nullable=False)  # 지급일 (Pay Date)
+    
+    # [개선] 배당락일 기준 계산을 위해 ex_dividend_date 컬럼 추가
+    ex_dividend_date = db.Column(db.Date, nullable=True, index=True) # 배당락일 (Ex-Dividend Date)
+    
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+
+    # 동일한 사용자의 동일 종목, 동일 배당락일 배당이 중복 저장되지 않도록 제약조건 추가 (선택사항)
+    __table_args__ = (db.UniqueConstraint('user_id', 'symbol', 'ex_dividend_date', name='_user_symbol_ex_date_uc'),)
+
 
 class StockPrice(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -76,6 +84,6 @@ def recalculate_holdings(user_id):
             final_cost = sum(b['quantity'] * b['price'] for b in buy_queue)
             avg_price = final_cost / final_quantity
             latest_buy_date = max(b['date'] for b in buy_queue) if buy_queue else None
-            holding = Holding(symbol=symbol, quantity=final_quantity, purchase_price=avg_price, purchase_date=latest_buy_date, user_id=user_id)
+            holding = Holding(symbol=symbol, quantity=final_quantity, purchase_price=avg_price, purchase_date=datetime.combine(latest_buy_date, datetime.min.time()) if latest_buy_date else None, user_id=user_id)
             db.session.add(holding)
     db.session.commit()
