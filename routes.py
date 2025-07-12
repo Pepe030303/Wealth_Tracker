@@ -48,12 +48,6 @@ def signup():
 
 
 def get_monthly_dividend_distribution(dividend_metrics):
-    """
-    [TLT 배당 문제 해결]
-    기존: 배당 월 개수로 나누어 월별 배당금 계산
-    변경: '연간 실제 배당 횟수'로 1회당 배당금을 계산하고, 각 배당월에 합산.
-          TLT가 12월에 2회 배당 시, 12월 막대에 2회분이 더해짐.
-    """
     monthly_totals = [0] * 12
     month_map = {'Jan':0, 'Feb':1, 'Mar':2, 'Apr':3, 'May':4, 'Jun':5, 'Jul':6, 'Aug':7, 'Sep':8, 'Oct':9, 'Nov':10, 'Dec':11}
     
@@ -63,10 +57,8 @@ def get_monthly_dividend_distribution(dividend_metrics):
         payout_count = dividend_info.get("count", 0)
 
         if payout_months and payout_count > 0 and metrics.get('expected_annual_dividend'):
-            # 1회 지급 시 배당금 = 연간 예상 배당금 / 연간 총 배당 횟수
             amount_per_payout = metrics['expected_annual_dividend'] / payout_count
             
-            # 각 배당월에 1회치 배당금을 더해줌
             for month_str in payout_months:
                 if month_str in month_map:
                     monthly_totals[month_map[month_str]] += amount_per_payout
@@ -88,18 +80,37 @@ def dashboard():
 
     total_investment = sum(h.quantity * h.purchase_price for h in holdings)
     total_current_value = sum(h.quantity * (price_data_map.get(h.symbol, {}).get('price') or h.purchase_price) for h in holdings)
-    sector_values = {}
+    
+    # --- 개선: 섹터 데이터 구조 변경 ---
+    # 각 섹터에 포함된 종목 정보를 저장하기 위한 구조
+    sector_details = {}
     for h in holdings:
-        profile = profile_data_map.get(h.symbol, {}); sector = profile.get('sector', 'N/A')
+        profile = profile_data_map.get(h.symbol, {}); 
+        sector = profile.get('sector', 'N/A')
         current_value = h.quantity * (price_data_map.get(h.symbol, {}).get('price') or h.purchase_price)
-        sector_values[sector] = sector_values.get(sector, 0) + current_value
+        
+        if sector not in sector_details:
+            sector_details[sector] = {'total_value': 0, 'holdings': []}
+            
+        sector_details[sector]['total_value'] += current_value
+        sector_details[sector]['holdings'].append({'symbol': h.symbol, 'value': current_value})
+
+    # Chart.js에 전달할 최종 데이터 구조
+    sector_allocation = [
+        {
+            'sector': sector, 
+            'value': details['total_value'],
+            'holdings': sorted(details['holdings'], key=lambda x: x['value'], reverse=True) # 금액 순으로 정렬
+        } 
+        for sector, details in sector_details.items()
+    ]
+    
     total_profit_loss = total_current_value - total_investment
     summary = {
         'total_investment': total_investment, 'total_current_value': total_current_value,
         'total_profit_loss': total_profit_loss,
         'total_return_percent': (total_profit_loss / total_investment * 100) if total_investment > 0 else 0
     }
-    sector_allocation = [{'sector': k, 'value': v} for k, v in sector_values.items()]
     monthly_dividend_data = get_monthly_dividend_distribution(dividend_metrics)
     return render_template('dashboard.html', summary=summary, sector_allocation=sector_allocation, monthly_dividend_data=monthly_dividend_data)
 
