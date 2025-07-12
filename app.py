@@ -70,7 +70,7 @@ from routes import main_bp
 app.register_blueprint(main_bp)
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))```
+    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
 
 #### 📄 routes.py
 *(변경 사항: 전역 검색 API 엔드포인트 `/api/search-stocks` 추가, 종목 상세 및 차트 페이지를 위한 `/stock/<symbol>` 라우트 추가)*
