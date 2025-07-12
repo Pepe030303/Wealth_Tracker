@@ -6,9 +6,9 @@ from sqlalchemy import func
 from app import db, task_queue
 from tasks import update_all_dividends_for_user
 from models import User, Holding, Dividend, Trade, recalculate_holdings
-from utils import get_dividend_allocation_data # get_dividend_months는 이제 서비스 내부에서만 사용
+from utils import get_dividend_allocation_data, get_dividend_months
 from stock_api import stock_api, US_STOCKS_LIST
-from services.portfolio_service import get_portfolio_analysis_data # 서비스 계층 import
+from services.portfolio_service import get_portfolio_analysis_data
 from flask_login import login_user, logout_user, current_user, login_required
 import logging
 
@@ -52,12 +52,9 @@ def signup():
 @main_bp.route('/')
 @login_required
 def dashboard():
-    # 개선: 서비스 계층을 호출하여 모든 포트폴리오 데이터를 한 번에 가져옴
     portfolio_data = get_portfolio_analysis_data(current_user.id)
-    
     if not portfolio_data:
         return render_template('dashboard.html', summary={}, sector_allocation=[], monthly_dividend_data={})
-
     return render_template('dashboard.html', 
                            summary=portfolio_data['summary'], 
                            sector_allocation=portfolio_data['sector_allocation'], 
@@ -66,13 +63,11 @@ def dashboard():
 @main_bp.route('/dividends')
 @login_required
 def dividends():
-    # 개선: 서비스 계층을 호출하여 코드 중복 제거
     portfolio_data = get_portfolio_analysis_data(current_user.id)
-
     if not portfolio_data:
         return render_template('dividends.html', dividend_metrics={}, allocation_data=[], monthly_dividend_data={})
     
-    # 배당 비중 데이터는 여기서 따로 계산
+    # 배당 비중 데이터 계산
     allocation_data = get_dividend_allocation_data(portfolio_data['dividend_metrics'])
 
     return render_template('dividends.html',
@@ -80,16 +75,14 @@ def dividends():
                            allocation_data=allocation_data,
                            monthly_dividend_data=portfolio_data['monthly_dividend_data'])
 
+# ... (holdings, trades, etc. routes are unchanged) ...
 @main_bp.route('/holdings')
 @login_required
 def holdings():
     holdings = Holding.query.filter_by(user_id=current_user.id).order_by(Holding.symbol).all()
     if not holdings: return render_template('holdings.html', holdings_data=[])
-    
-    # holdings 페이지는 API 호출이 많으므로 캐싱의 이점을 크게 받음
     symbols = {h.symbol for h in holdings}
     price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
-    
     holdings_data = []
     for h in holdings:
         price_data = price_data_map.get(h.symbol)
@@ -104,7 +97,6 @@ def holdings():
         })
     return render_template('holdings.html', holdings_data=holdings_data)
 
-# ... (trades, dividends_history, allocation 등 다른 라우트는 변경 없음) ...
 @main_bp.route('/trades')
 @login_required
 def trades():
