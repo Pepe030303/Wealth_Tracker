@@ -1,4 +1,4 @@
-# utils.py
+# 📄 utils.py
 
 from datetime import datetime, timedelta
 import logging
@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 def calculate_dividend_metrics(holdings, price_data_map):
     """
     보유 종목 목록과 가격 정보를 받아, 예상 연간 배당금과 수익률을 계산합니다.
+    SCHD와 같은 ETF를 위해 yield 기반 계산 로직을 추가했습니다.
     """
     if not holdings: return {}
     
@@ -20,13 +21,17 @@ def calculate_dividend_metrics(holdings, price_data_map):
         try:
             ticker = yf.Ticker(symbol)
             info = ticker.info
-            annual_dps = float(info.get('trailingAnnualDividendRate') or info.get('dividendRate') or 0)
             
+            annual_dps = float(info.get('trailingAnnualDividendRate') or info.get('dividendRate') or 0)
+            current_price = price_data_map.get(symbol, {}).get('price')
+
+            if annual_dps == 0 and info.get('yield') and current_price:
+                annual_dps = float(info['yield']) * current_price
+
             if annual_dps > 0:
                 expected_annual_dividend = annual_dps * h.quantity
-                current_price = price_data_map.get(symbol, {}).get('price')
                 
-                dividend_yield = (annual_dps / current_price) * 100 if current_price and current_price > 0 else info.get('yield', 0) * 100
+                dividend_yield = (annual_dps / current_price) * 100 if current_price and current_price > 0 else 0
                 
                 dividend_metrics[symbol] = {
                     'expected_annual_dividend': expected_annual_dividend,
@@ -35,6 +40,7 @@ def calculate_dividend_metrics(holdings, price_data_map):
         except Exception as e:
             logger.warning(f"({symbol}) 배당 지표 계산 실패: {e}")
             continue
+            
     return dividend_metrics
 
 def get_dividend_allocation_data(dividend_metrics):
@@ -49,23 +55,23 @@ def get_dividend_months(symbol):
 
     try:
         ticker = yf.Ticker(upper_symbol)
-        # 배당락일이 포함된 .actions 데이터를 가져옵니다.
         actions = ticker.actions
         if actions is not None and not actions.empty and 'Dividends' in actions.columns and actions['Dividends'].sum() > 0:
             ex_dividend_dates = actions[actions['Dividends'] > 0].index
             
-            # 시간대 정보 제거
             ex_dividend_dates_naive = ex_dividend_dates.tz_convert(None) if ex_dividend_dates.tz is not None else ex_dividend_dates
             
-            # 최근 18개월 데이터만 사용
             start_date = pd.to_datetime(datetime.now() - timedelta(days=540))
             recent_ex_dates = ex_dividend_dates_naive[ex_dividend_dates_naive > start_date]
             
             if not recent_ex_dates.empty:
-                paid_months = sorted(list(recent_ex_dates.month.unique()))
-                # SCHD와 같은 분기 배당주 보정 로직
-                if len(paid_months) < 4 and any(m in [3,6,9,12] for m in paid_months):
-                    paid_months = [3, 6, 9, 12]
+                paid_months = sorted(list(set(recent_ex_dates.month)))
+                
+                if len(paid_months) > 0 and len(paid_months) < 4:
+                    intervals = [j-i for i, j in zip(paid_months[:-1], paid_months[1:])]
+                    if all(i % 3 == 0 for i in intervals):
+                        if any(m in [3,6,9,12] for m in paid_months):
+                            paid_months = [3, 6, 9, 12]
 
                 month_names = [MONTH_NUMBER_TO_NAME.get(m, '') for m in paid_months]
                 DIVIDEND_MONTH_CACHE[upper_symbol] = month_names
