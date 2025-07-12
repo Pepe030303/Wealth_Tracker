@@ -16,25 +16,31 @@
                 {% for data in holdings_data %}
                 <div class="list-group-item p-3">
                     <div class="row align-items-center g-3">
-                        <div class="col-md-6 col-lg-7 d-flex align-items-center">
-                            <img src="{{ url_for('static', filename='logos/placeholder.png') }}"
-                                 alt="{{ data.holding.symbol }} logo"
-                                 class="stock-logo me-3">
+                        <div class="col-lg-4 d-flex align-items-center">
+                            <div class="stock-logo placeholder me-3">
+                                <span>{{ data.holding.symbol[0] }}</span>
+                            </div>
                             <div>
                                 <h5 class="mb-0 fw-bold">{{ data.holding.symbol }}</h5>
                                 <span class="text-muted">{{ data.holding.quantity | round(2) }} 주</span>
                             </div>
                         </div>
-                        <div class="col-md-6 col-lg-5 text-md-end">
-                            <div class="d-flex justify-content-between justify-content-md-end border-bottom pb-2 mb-2">
-                                <span class="text-muted me-2 small">현재가/평단가</span>
-                                <span>${{ "%.2f"|format(data.current_price) }} / ${{ "%.2f"|format(data.holding.purchase_price) }}</span>
-                            </div>
-                            <div class="d-flex justify-content-between justify-content-md-end {% if data.profit_loss >= 0 %}text-success{% else %}text-danger{% endif %}">
-                                <span class="me-2 small">손익/수익률</span>
-                                <span class="fw-bold">
-                                    ${{ "%.2f"|format(data.profit_loss) }} ({{ "%.2f"|format(data.profit_loss_percent) }}%)
-                                </span>
+                        <div class="col-lg-8">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <small class="text-muted d-block">총 평가금액</small>
+                                    <strong>${{ "%.2f"|format(data.current_value) }}</strong>
+                                </div>
+                                <div class="col-md-4">
+                                    <small class="text-muted d-block">현재가 / 평단가</small>
+                                    <span>${{ "%.2f"|format(data.current_price) }} / ${{ "%.2f"|format(data.holding.purchase_price) }}</span>
+                                </div>
+                                <div class="col-md-4">
+                                     <small class="text-muted d-block">손익 (수익률)</small>
+                                     <strong class="{% if data.profit_loss >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                        ${{ "%.2f"|format(data.profit_loss) }} ({{ "%.2f"|format(data.profit_loss_percent) }}%)
+                                    </strong>
+                                </div>
                             </div>
                         </div>
                     </div>
