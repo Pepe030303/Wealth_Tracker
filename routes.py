@@ -80,13 +80,15 @@ def holdings():
     
     symbols = {h.symbol for h in holdings}
     price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
+    # 🛠️ 로고 표시를 위해 프로필 데이터도 함께 조회
+    profile_data_map = {s: stock_api.get_stock_profile(s) for s in symbols}
     
     holdings_data = []
     for h in holdings:
         price_data = price_data_map.get(h.symbol)
         current_price = price_data['price'] if price_data else h.purchase_price
         
-        # [개선] 템플릿에서 필요한 모든 데이터를 여기서 계산하여 전달
+        # 🛠️ 템플릿에서 필요한 모든 데이터를 여기서 계산하여 전달
         total_cost = h.quantity * h.purchase_price
         current_value = h.quantity * current_price
         profit_loss = current_value - total_cost
@@ -94,6 +96,7 @@ def holdings():
 
         holdings_data.append({
             'holding': h,
+            'profile': profile_data_map.get(h.symbol), # 템플릿에 프로필 데이터 전달
             'current_price': current_price,
             'total_cost': total_cost,
             'current_value': current_value,
