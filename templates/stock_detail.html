@@ -14,7 +14,6 @@
     </button>
 </div>
 
-<!-- 종목 요약 정보 카드 -->
 <div class="row mb-4">
     <div class="col-md-4">
         <div class="card">
@@ -44,7 +43,6 @@
     </div>
 </div>
 
-<!-- 시세 차트 -->
 <div class="card">
     <div class="card-header">
         <h5 class="card-title mb-0">
@@ -65,12 +63,10 @@
 document.addEventListener('DOMContentLoaded', function () {
     const ctx = document.getElementById('stockPriceChart').getContext('2d');
     
-    // Jinja 템플릿에서 받은 데이터를 Javascript 변수로 변환
     const priceHistory = {{ price_history|tojson }};
     const labels = priceHistory.dates;
     const dataPoints = priceHistory.prices;
     
-    // 가격 변동에 따른 선 색상 결정
     const firstPrice = dataPoints[0];
     const lastPrice = dataPoints[dataPoints.length - 1];
     const chartColor = lastPrice >= firstPrice ? 'rgba(25, 135, 84, 0.7)' : 'rgba(220, 53, 69, 0.7)';
@@ -86,8 +82,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 borderColor: chartBorderColor,
                 backgroundColor: chartColor,
                 fill: true,
-                tension: 0.1, // 선을 부드럽게
-                pointRadius: 0 // 데이터 포인트를 숨김
+                tension: 0.1,
+                pointRadius: 0
             }]
         },
         options: {
@@ -96,14 +92,12 @@ document.addEventListener('DOMContentLoaded', function () {
             scales: {
                 x: {
                     ticks: {
-                        // X축 레이블이 너무 많으면 자동으로 건너뛰도록 설정
                         autoSkip: true,
                         maxTicksLimit: 10
                     }
                 },
                 y: {
                     ticks: {
-                        // Y축 레이블에 달러($) 기호 추가
                         callback: function(value, index, values) {
                             return '$' + value;
                         }
