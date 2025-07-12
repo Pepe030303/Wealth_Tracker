@@ -1,3 +1,5 @@
+{# 📄 templates/holdings.html #}
+
 {% extends "base.html" %}
 {% block title %}보유 종목 - Wealth Tracker{% endblock %}
 {% block content %}
@@ -16,29 +18,36 @@
                 {% for data in holdings_data %}
                 <div class="list-group-item p-3">
                     <div class="row align-items-center g-3">
+                        {# 좌측: 종목 기본 정보 #}
                         <div class="col-lg-4 d-flex align-items-center">
                             <div class="stock-logo placeholder me-3">
                                 <span>{{ data.holding.symbol[0] }}</span>
                             </div>
                             <div>
                                 <h5 class="mb-0 fw-bold">{{ data.holding.symbol }}</h5>
-                                <span class="text-muted">{{ data.holding.quantity | round(2) }} 주</span>
+                                <span class="text-muted">{{ data.holding.quantity | round(4) }} 주 @ ${{ "%.2f"|format(data.holding.purchase_price) }}</span>
                             </div>
                         </div>
+                        {# 우측: 재무 상세 정보 #}
                         <div class="col-lg-8">
-                            <div class="row">
+                            <div class="row text-center text-md-start">
+                                {# 개선: 총 평가금액 #}
                                 <div class="col-md-4">
-                                    <small class="text-muted d-block">총 평가금액</small>
+                                    <small class="text-muted d-block">현재 평가 금액</small>
                                     <strong>${{ "%.2f"|format(data.current_value) }}</strong>
+                                    <div class="small text-muted">현재가: ${{ "%.2f"|format(data.current_price) }}</div>
                                 </div>
+                                {# 개선: 총 투자금액 #}
                                 <div class="col-md-4">
-                                    <small class="text-muted d-block">현재가 / 평단가</small>
-                                    <span>${{ "%.2f"|format(data.current_price) }} / ${{ "%.2f"|format(data.holding.purchase_price) }}</span>
+                                    <small class="text-muted d-block">총 투자 금액</small>
+                                    <strong>${{ "%.2f"|format(data.total_cost) }}</strong>
                                 </div>
+                                {# 개선: 손익 및 수익률 #}
                                 <div class="col-md-4">
                                      <small class="text-muted d-block">손익 (수익률)</small>
                                      <strong class="{% if data.profit_loss >= 0 %}text-success{% else %}text-danger{% endif %}">
-                                        ${{ "%.2f"|format(data.profit_loss) }} ({{ "%.2f"|format(data.profit_loss_percent) }}%)
+                                        ${{ '%+.2f'|format(data.profit_loss) }}
+                                        ({{ '%+.2f'|format(data.profit_loss_percent) }}%)
                                     </strong>
                                 </div>
                             </div>
