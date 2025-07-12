@@ -45,12 +45,14 @@ def strftime_filter(dt, fmt='%Y-%m-%d'):
     if dt is None: return ""
     return dt.strftime(fmt)
 
+# [에러 해결] Jinja2 필터는 단순한 데이터 변환 역할만 수행하도록 수정
+# 이제 이 필터는 'get_dividend_months' 함수를 직접 호출하지 않고, 월 이름 리스트를 받아 한글로 변환합니다.
 @app.template_filter('korean_dividend_months')
-def korean_dividend_months_filter(symbol):
-    from utils import get_dividend_months
-    months = get_dividend_months(symbol)
+def korean_dividend_months_filter(month_names):
+    if not isinstance(month_names, list):
+        return []
     month_map = {'Jan':'1월','Feb':'2월','Mar':'3월','Apr':'4월','May':'5월','Jun':'6월','Jul':'7월','Aug':'8월','Sep':'9월','Oct':'10월','Nov':'11월','Dec':'12월'}
-    return [month_map.get(m, m) for m in months]
+    return [month_map.get(m, m) for m in month_names]
 
 db.init_app(app)
 
