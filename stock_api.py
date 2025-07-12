@@ -138,13 +138,15 @@ class StockAPIService:
 
         try:
             info = yf.Ticker(symbol).info
+            # 🛠️ 기능 추가: 종목 프로필에 로고 URL을 포함하여 반환
             profile_data = {
                 'name': info.get('longName', symbol),
-                'sector': info.get('sector', 'ETF' if info.get('quoteType') == 'ETF' else 'N/A')
+                'sector': info.get('sector', 'ETF' if info.get('quoteType') == 'ETF' else 'N/A'),
+                'logo_url': info.get('logo_url')
             }
         except Exception as e:
             logger.warning(f"프로필 조회 실패 ({symbol}): {e}")
-            profile_data = {'name': symbol, 'sector': 'N/A'}
+            profile_data = {'name': symbol, 'sector': 'N/A', 'logo_url': None}
 
         self._set_to_redis_cache(cache_key, profile_data)
         return profile_data
