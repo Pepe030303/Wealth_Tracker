@@ -64,10 +64,14 @@ def dashboard():
     holdings = Holding.query.filter_by(user_id=current_user.id).all()
     if not holdings:
         return render_template('dashboard.html', summary={}, sector_allocation=[], monthly_dividend_data={'labels': [], 'data': []})
-    dividend_metrics = calculate_dividend_metrics(current_user.id)
+
     symbols = {h.symbol for h in holdings}
     price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
     profile_data_map = {s: stock_api.get_stock_profile(s) for s in symbols}
+
+    # Error Fix: Pass correct arguments to the function
+    dividend_metrics = calculate_dividend_metrics(holdings, price_data_map)
+
     total_investment = sum(h.quantity * h.purchase_price for h in holdings)
     total_current_value = sum(h.quantity * (price_data_map.get(h.symbol, {}).get('price') or h.purchase_price) for h in holdings)
     sector_values = {}
@@ -98,7 +102,9 @@ def holdings():
         current_price = price_data['price'] if price_data else h.purchase_price
         current_value = h.quantity * current_price
         holdings_data.append({
-            'holding': h, 'logo': None, 'current_price': current_price,
+            'holding': h,
+            'current_price': current_price,
+            'current_value': current_value,
             'profit_loss': current_value - (h.quantity * h.purchase_price),
             'profit_loss_percent': (current_value - (h.quantity * h.purchase_price)) / (h.quantity * h.purchase_price) * 100 if h.purchase_price > 0 else 0,
         })
@@ -108,13 +114,7 @@ def holdings():
 @login_required
 def trades():
     trades = Trade.query.filter_by(user_id=current_user.id).order_by(Trade.trade_date.desc(), Trade.id.desc()).all()
-    holdings = Holding.query.filter_by(user_id=current_user.id).all()
-    trade_summary = {}
-    for holding in holdings:
-        buy_trades = Trade.query.filter_by(user_id=current_user.id, symbol=holding.symbol, trade_type='buy').all()
-        sell_trades = Trade.query.filter_by(user_id=current_user.id, symbol=holding.symbol, trade_type='sell').all()
-        trade_summary[holding.symbol] = {'net_quantity': holding.quantity, 'avg_price': holding.purchase_price, 'total_bought': sum(t.quantity for t in buy_trades), 'total_sold': sum(t.quantity for t in sell_trades)}
-    return render_template('trades.html', trades=trades, trade_summary=trade_summary)
+    return render_template('trades.html', trades=trades)
 
 @main_bp.route('/trades/add', methods=['POST'])
 @login_required
@@ -148,20 +148,43 @@ def delete_trade(trade_id):
     flash(f'{trade.symbol} 거래가 삭제되었습니다.', 'success')
     return redirect(url_for('main.trades'))
 
-# --- 여기에 /dividends 라우트가 하나만 존재해야 합니다. ---
 @main_bp.route('/dividends')
 @login_required
 def dividends():
-    if task_queue: task_queue.enqueue(update_all_dividends_for_user, current_user.id, job_timeout='10m')
-    
-    dividend_metrics = calculate_dividend_metrics(current_user.id)
+    holdings = Holding.query.filter_by(user_id=current_user.id).all()
+    if not holdings:
+        return render_template('dividends.html', dividend_metrics={}, allocation_data=[], monthly_dividend_data={})
+
+    symbols = {h.symbol for h in holdings}
+    price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
+
+    # Error Fix: Pass correct arguments to the function
+    dividend_metrics = calculate_dividend_metrics(holdings, price_data_map)
     allocation_data = get_dividend_allocation_data(dividend_metrics)
     monthly_dividend_data = get_monthly_dividend_distribution(dividend_metrics)
 
-    return render_template('dividends.html', 
-                           dividend_metrics=dividend_metrics, 
+    return render_template('dividends.html',
+                           dividend_metrics=dividend_metrics,
                            allocation_data=allocation_data,
                            monthly_dividend_data=monthly_dividend_data)
+
+@main_bp.route('/dividends/history')
+@login_required
+def dividends_history():
+    # Enqueue background task
+    if task_queue:
+        task_queue.enqueue(update_all_dividends_for_user, current_user.id, job_timeout='10m')
+
+    # Fetch actual dividend records from the database
+    page = request.args.get('page', 1, type=int)
+    dividends_pagination = Dividend.query.filter_by(user_id=current_user.id).order_by(Dividend.dividend_date.desc()).paginate(page=page, per_page=20, error_out=False)
+    
+    # Calculate total received
+    total_received = db.session.query(func.sum(Dividend.amount)).filter_by(user_id=current_user.id).scalar() or 0
+    
+    return render_template('dividends_history.html', 
+                           dividends_pagination=dividends_pagination,
+                           total_received=total_received)
 
 @main_bp.route('/allocation')
 @login_required
