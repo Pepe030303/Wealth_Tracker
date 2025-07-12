@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 def calculate_dividend_metrics(user_id):
     """
-    보유 종목의 예상 연간 배당금과 수익률을 다각도로 계산합니다.
+    보유 종목의 예상 연간 배당금과 수익률을 계산하며, 모든 과정을 상세히 로깅합니다.
     """
     holdings = Holding.query.filter_by(user_id=user_id).all()
     if not holdings: return {}
@@ -20,54 +20,68 @@ def calculate_dividend_metrics(user_id):
     from stock_api import stock_api
 
     for h in holdings:
+        symbol = h.symbol.upper()
+        logger.info(f"--- [{symbol}] 배당 지표 계산 시작 ---")
         try:
-            ticker = yf.Ticker(h.symbol)
+            ticker = yf.Ticker(symbol)
             info = ticker.info
             
-            annual_dps = 0.0 # 연간 주당 배당금 (Annual Dividends Per Share)
-            
-            # --- 1순위: info 객체에서 직접적인 연간 배당금 정보 조회 ---
-            if info.get('trailingAnnualDividendRate'): # ETF와 일부 주식에 사용
-                annual_dps = float(info['trailingAnnualDividendRate'])
-            elif info.get('dividendRate'): # 일반 주식에 주로 사용
-                annual_dps = float(info['dividendRate'])
-            
-            # --- 2순위: 과거 1년치 배당금 합산 ---
+            annual_dps = 0.0
+
+            # --- 1. info 객체에서 직접적인 정보 조회 및 로깅 ---
+            rate_from_info = info.get('trailingAnnualDividendRate') or info.get('dividendRate')
+            if rate_from_info:
+                annual_dps = float(rate_from_info)
+            logger.info(f"[{symbol}] .info.trailingAnnualDividendRate: {info.get('trailingAnnualDividendRate')}")
+            logger.info(f"[{symbol}] .info.dividendRate: {info.get('dividendRate')}")
+            logger.info(f"[{symbol}] .info에서 계산된 DPS: {annual_dps}")
+
+            # --- 2. 과거 1년치 배당금 합산 (폴백) 및 로깅 ---
             if annual_dps == 0 and not ticker.dividends.empty:
                 naive_dividends = ticker.dividends.tz_localize(None)
                 last_year_dividends = naive_dividends[naive_dividends.index > datetime.now() - timedelta(days=365)]
                 if not last_year_dividends.empty:
-                    annual_dps = last_year_dividends.sum()
-
-            price_data = stock_api.get_stock_price(h.symbol)
+                    annual_dps_from_history = last_year_dividends.sum()
+                    annual_dps = float(annual_dps_from_history)
+                    logger.info(f"[{symbol}] 과거 1년 배당금 합산 DPS: {annual_dps}")
+            
+            price_data = stock_api.get_stock_price(symbol)
             current_price = price_data.get('price') if price_data else None
+            logger.info(f"[{symbol}] 현재 주가: {current_price}")
 
-            # --- 3순위: 수익률(yield)과 현재가로 역산 ---
+            # --- 3. 수익률(yield)로 역산 (최후의 폴백) 및 로깅 ---
             if annual_dps == 0 and info.get('yield') and current_price:
-                annual_dps = current_price * info.get('yield')
+                annual_dps_from_yield = current_price * info.get('yield')
+                annual_dps = float(annual_dps_from_yield)
+                logger.info(f"[{symbol}] .info.yield: {info.get('yield')}")
+                logger.info(f"[{symbol}] 수익률로 역산한 DPS: {annual_dps}")
 
-            # --- 최종 계산 및 추가 ---
+            # --- 4. 최종 계산 및 로깅 ---
+            logger.info(f"[{symbol}] 최종 결정된 연간 DPS: {annual_dps}")
             if annual_dps > 0:
                 expected_annual_dividend = annual_dps * h.quantity
-                
                 if current_price and current_price > 0:
                     dividend_yield = (annual_dps / current_price) * 100
-                else: # 가격 정보가 없을 경우 info의 yield 사용
+                else:
                     dividend_yield = info.get('yield', 0) * 100
-
-                dividend_metrics[h.symbol] = {
+                
+                logger.info(f"[{symbol}] 최종 결과: 연간 배당금 ${expected_annual_dividend:.2f}, 수익률 {dividend_yield:.2f}%")
+                dividend_metrics[symbol] = {
                     'expected_annual_dividend': expected_annual_dividend,
                     'dividend_yield': dividend_yield
                 }
+            logger.info(f"--- [{symbol}] 배당 지표 계산 종료 ---")
+
         except Exception as e:
-            logger.warning(f"({h.symbol}) 배당 지표 계산 실패: {e}")
+            logger.warning(f"({symbol}) 배당 지표 계산 중 예외 발생: {e}")
+            logger.info(f"--- [{symbol}] 배당 지표 계산 종료 (실패) ---")
             continue
             
     return dividend_metrics
 
+# --- 나머지 함수들은 이전 최종본과 동일 ---
 def get_dividend_allocation_data(dividend_metrics):
     return [{'symbol': s, 'value': m['expected_annual_dividend']} for s, m in dividend_metrics.items() if m.get('expected_annual_dividend', 0) > 0]
-
 
 DIVIDEND_MONTH_CACHE = {}
 MONTH_NUMBER_TO_NAME = {1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'}
