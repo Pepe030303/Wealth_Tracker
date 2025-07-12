@@ -48,15 +48,30 @@ def signup():
 
 
 def get_monthly_dividend_distribution(dividend_metrics):
+    """
+    [TLT 배당 문제 해결]
+    기존: 배당 월 개수로 나누어 월별 배당금 계산
+    변경: '연간 실제 배당 횟수'로 1회당 배당금을 계산하고, 각 배당월에 합산.
+          TLT가 12월에 2회 배당 시, 12월 막대에 2회분이 더해짐.
+    """
     monthly_totals = [0] * 12
     month_map = {'Jan':0, 'Feb':1, 'Mar':2, 'Apr':3, 'May':4, 'Jun':5, 'Jul':6, 'Aug':7, 'Sep':8, 'Oct':9, 'Nov':10, 'Dec':11}
+    
     for symbol, metrics in dividend_metrics.items():
-        payout_months = get_dividend_months(symbol)
-        if payout_months and metrics.get('expected_annual_dividend'):
-            monthly_amount = metrics['expected_annual_dividend'] / len(payout_months) if len(payout_months) > 0 else 0
+        dividend_info = get_dividend_months(symbol)
+        payout_months = dividend_info.get("months", [])
+        payout_count = dividend_info.get("count", 0)
+
+        if payout_months and payout_count > 0 and metrics.get('expected_annual_dividend'):
+            # 1회 지급 시 배당금 = 연간 예상 배당금 / 연간 총 배당 횟수
+            amount_per_payout = metrics['expected_annual_dividend'] / payout_count
+            
+            # 각 배당월에 1회치 배당금을 더해줌
             for month_str in payout_months:
-                if month_str in month_map: monthly_totals[month_map[month_str]] += monthly_amount
-    return {'labels': [f"{i+1}월" for i in range(12)], 'data': monthly_totals}
+                if month_str in month_map:
+                    monthly_totals[month_map[month_str]] += amount_per_payout
+    
+    return {'labels': [f"{i+1}월" for i in range(12)], 'data': [round(m, 2) for m in monthly_totals]}
 
 @main_bp.route('/')
 @login_required
