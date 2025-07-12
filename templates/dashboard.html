@@ -46,7 +46,7 @@
         <div class="card h-100">
             <div class="card-header"><h5 class="card-title mb-0">월별 예상 배당금</h5></div>
             <div class="card-body">
-                <canvas id="monthlyDividendChart" style="height: 250px;"></canvas>
+                <canvas id="monthlyDividendChart" style="height: 300px;"></canvas>
             </div>
         </div>
     </div>
@@ -81,53 +81,64 @@ document.addEventListener('DOMContentLoaded', function () {
     const dividendCtx = document.getElementById('monthlyDividendChart')?.getContext('2d');
 
     if (sectorCtx && sectorData && sectorData.length > 0) {
+        // [차트 개선] 섹터 트리맵 차트 로직 전면 수정
+        const totalPortfolioValue = sectorData.reduce((sum, sector) => sum + sector.value, 0);
+
         new Chart(sectorCtx, {
             type: 'treemap',
             data: { 
                 datasets: [{
+                    // [오류 수정] 데이터 구조를 단순화하고 필요한 모든 정보를 명시적으로 포함
                     tree: sectorData,
-                    key: 'value',
-                    groups: ['sector'],
+                    key: 'value', // 차트 크기 기준
+                    groups: ['sector'], // 그룹화 기준
+                    // 데이터 라벨 설정 (차트 내부에 표시될 텍스트)
+                    labels: {
+                        display: true,
+                        color: 'white',
+                        font: { size: 16, weight: 'bold' },
+                        // [가독성 개선] 배경색과 대비되는 텍스트 테두리 추가
+                        textStrokeColor: 'rgba(0,0,0,0.6)',
+                        textStrokeWidth: 2,
+                        formatter(context) {
+                            if (context.raw) {
+                                const item = context.raw;
+                                const percentage = (item.v / totalPortfolioValue * 100).toFixed(1);
+                                return [item.g, `$${item.v.toFixed(0)}`, `(${percentage}%)`];
+                            }
+                            return null;
+                        }
+                    },
+                    // 각 섹터별 배경색
                     backgroundColor: (ctx) => {
                         const colors = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0', '#6f42c1', '#fd7e14'];
                         if (ctx.type === 'dataset') return 'transparent';
                         return colors[ctx.dataIndex % colors.length];
-                    },
-                    labels: {
-                        display: true,
-                        color: 'white',
-                        // 개선: 폰트 크기 14 -> 16으로 키워 가독성 향상
-                        font: { size: 16, weight: 'bold' },
-                        formatter(ctx) {
-                            if (ctx.type === 'data') {
-                                const item = ctx.dataset.data[ctx.dataIndex];
-                                const total = ctx.dataset.data.reduce((s, d) => s + d.v, 0);
-                                return [item.g, `$${item.v.toFixed(0)}`, `(${(item.v / total * 100).toFixed(1)}%)`];
-                            }
-                        }
                     }
                 }]
             },
-            options: { 
-                plugins: { 
+            options: {
+                plugins: {
                     legend: { display: false },
-                    // 개선: 툴팁에 포함된 종목 리스트 표시
+                    // [가독성 개선] 툴팁(마우스 오버) 설정
                     tooltip: {
+                        // [가독성 개선] 폰트 크기 조정
+                        titleFont: { size: 14, weight: 'bold' },
+                        bodyFont: { size: 12 },
                         callbacks: {
                             title: function(tooltipItems) {
-                                const item = tooltipItems[0].raw._data;
-                                return `${item.sector} | $${item.value.toFixed(2)}`;
+                                const item = tooltipItems[0].raw;
+                                return `${item.g} | $${item.v.toFixed(2)}`;
                             },
+                            // [오류 수정] 툴팁 본문에 상세 종목 정보 표시
                             label: function(context) {
-                                return ''; // 기본 라벨은 비움
-                            },
-                            afterBody: function(tooltipItems) {
-                                const item = tooltipItems[0].raw._data;
-                                const holdings = item.holdings || [];
-                                let holdingsText = ['\n--- Holdings ---'];
+                                const item = context.raw;
+                                const holdings = item._data.holdings || [];
+                                let holdingsText = ['\nHoldings:'];
+                                
                                 holdings.forEach(h => {
-                                    const percentage = (h.value / item.value * 100).toFixed(1);
-                                    holdingsText.push(`${h.symbol}: $${h.value.toFixed(2)} (${percentage}%)`);
+                                    const percentage = (h.value / item.v * 100).toFixed(1);
+                                    holdingsText.push(`  ${h.symbol}: $${h.value.toFixed(2)} (${percentage}%)`);
                                 });
                                 return holdingsText;
                             }
@@ -138,36 +149,30 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    if (dividendCtx && monthlyData && monthlyData.data.some(d => d > 0)) {
+    if (dividendCtx && monthlyData && monthlyData.datasets.length > 0) {
+        // ... (월별 배당금 차트 로직은 이전 요청에서 완료되어 변경 없음) ...
         new Chart(dividendCtx, {
             type: 'bar',
-            data: { 
-                labels: monthlyData.labels, 
-                datasets: [{ 
-                    label: '예상 배당금 ($)', 
-                    data: monthlyData.data, 
-                    backgroundColor: 'rgba(25, 135, 84, 0.7)' 
-                }] 
-            },
-            options: { 
-                responsive: true, 
-                maintainAspectRatio: false, 
-                plugins: { 
-                    legend: { display: false },
+            data: { labels: monthlyData.labels, datasets: monthlyData.datasets },
+            options: {
+                responsive: true, maintainAspectRatio: false, layout: { padding: { top: 30 } },
+                plugins: {
+                    legend: { display: true, position: 'bottom' },
                     datalabels: {
-                        anchor: 'end',
-                        align: 'end',
-                        formatter: (value) => value > 0 ? '$' + value.toFixed(2) : null,
-                        color: '#adb5bd',
-                        font: { weight: 'bold' }
+                        display: context => context.datasetIndex === context.chart.data.datasets.length - 1 && context.chart.data.datasets[context.datasetIndex].data[context.dataIndex] > 0,
+                        formatter: (value, context) => { let total = 0; context.chart.data.datasets.forEach(ds => { total += ds.data[context.dataIndex]; }); return total > 0 ? '$' + total.toFixed(2) : null; },
+                        anchor: 'end', align: 'top', color: '#adb5bd', font: { weight: 'bold' }
+                    },
+                    tooltip: {
+                        mode: 'index', intersect: false,
+                        callbacks: {
+                            title: (tooltipItems) => `2025년 ${tooltipItems[0].label}`,
+                            label: (context) => { const label = context.dataset.label || ''; const value = context.parsed.y; if (value === 0) return null; const total = context.chart.data.datasets.reduce((sum, ds) => sum + ds.data[context.dataIndex], 0); const percentage = total > 0 ? (value / total * 100).toFixed(1) : 0; return `${label}: $${value.toFixed(2)} (${percentage}%)`; },
+                            footer: (tooltipItems) => { let total = 0; tooltipItems.forEach(item => { total += item.parsed.y; }); return '총액: $' + total.toFixed(2); }
+                        }
                     }
-                }, 
-                scales: { 
-                    y: { 
-                        beginAtZero: true, 
-                        ticks: { callback: (v) => '$' + v.toFixed(0) } 
-                    } 
-                } 
+                },
+                scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { callback: (v) => '$' + v.toFixed(0) } } }
             }
         });
     }
