@@ -1,4 +1,5 @@
 {# 📄 templates/holdings.html #}
+{# 🛠️ UI/UX 개선: 보유 종목 리스트의 레이아웃을 전면 개편하고 로고를 표시합니다. #}
 
 {% extends "base.html" %}
 {% block title %}보유 종목 - Wealth Tracker{% endblock %}
@@ -18,36 +19,41 @@
                 {% for data in holdings_data %}
                 <div class="list-group-item p-3">
                     <div class="row align-items-center g-3">
-                        {# 좌측: 종목 기본 정보 #}
-                        <div class="col-lg-4 d-flex align-items-center">
-                            <div class="stock-logo placeholder me-3">
-                                <span>{{ data.holding.symbol[0] }}</span>
-                            </div>
+                        {# 좌측: 종목 로고, 심볼, 이름 #}
+                        <div class="col-lg-3 d-flex align-items-center">
+                            {% if data.profile and data.profile.logo_url %}
+                                <img src="{{ data.profile.logo_url }}" class="stock-logo" alt="{{ data.holding.symbol }} logo"
+                                     onerror="this.onerror=null; this.src='https://via.placeholder.com/32/667eea/FFFFFF?text={{ data.holding.symbol[0] }}';">
+                            {% else %}
+                                <div class="stock-logo placeholder">
+                                    <span>{{ data.holding.symbol[0] }}</span>
+                                </div>
+                            {% endif %}
                             <div>
                                 <h5 class="mb-0 fw-bold">{{ data.holding.symbol }}</h5>
-                                <span class="text-muted">{{ data.holding.quantity | round(4) }} 주 @ ${{ "%.2f"|format(data.holding.purchase_price) }}</span>
+                                <span class="company-name">{{ data.profile.name if data.profile else 'N/A' }}</span>
                             </div>
                         </div>
-                        {# 우측: 재무 상세 정보 #}
-                        <div class="col-lg-8">
-                            <div class="row text-center text-md-start">
-                                {# 개선: 총 평가금액 #}
-                                <div class="col-md-4">
-                                    <small class="text-muted d-block">현재 평가 금액</small>
-                                    <strong>${{ "%.2f"|format(data.current_value) }}</strong>
-                                    <div class="small text-muted">현재가: ${{ "%.2f"|format(data.current_price) }}</div>
+
+                        {# 우측: 재무 상세 정보 (간결한 레이아웃) #}
+                        <div class="col-lg-9">
+                            <div class="row text-center text-lg-start">
+                                <!-- 1. 현재가 / 평단가 -->
+                                <div class="col-md-4 col-sm-6 mb-2 mb-md-0">
+                                    <small class="text-muted d-block">현재가 / 평단가</small>
+                                    <strong>${{ "%.2f"|format(data.current_price) }}</strong> / <span class="text-muted">${{ "%.2f"|format(data.holding.purchase_price) }}</span>
                                 </div>
-                                {# 개선: 총 투자금액 #}
-                                <div class="col-md-4">
-                                    <small class="text-muted d-block">총 투자 금액</small>
-                                    <strong>${{ "%.2f"|format(data.total_cost) }}</strong>
+                                <!-- 2. 평가금액 / 투자금액 -->
+                                <div class="col-md-4 col-sm-6 mb-2 mb-md-0">
+                                    <small class="text-muted d-block">평가금액 / 투자금액</small>
+                                    <strong>${{ "%.2f"|format(data.current_value) }}</strong> / <span class="text-muted">${{ "%.2f"|format(data.total_cost) }}</span>
                                 </div>
-                                {# 개선: 손익 및 수익률 #}
-                                <div class="col-md-4">
+                                <!-- 3. 손익 (수익률) -->
+                                <div class="col-md-4 col-sm-12">
                                      <small class="text-muted d-block">손익 (수익률)</small>
                                      <strong class="{% if data.profit_loss >= 0 %}text-success{% else %}text-danger{% endif %}">
                                         ${{ '%+.2f'|format(data.profit_loss) }}
-                                        ({{ '%+.2f'|format(data.profit_loss_percent) }}%)
+                                        <span class="ms-1">({{ '%+.2f'|format(data.profit_loss_percent) }}%)</span>
                                     </strong>
                                 </div>
                             </div>
