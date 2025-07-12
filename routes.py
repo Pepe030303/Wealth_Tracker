@@ -1,13 +1,13 @@
-# routes.py
+# 📄 routes.py
 
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 from datetime import datetime
-from sqlalchemy import func, extract
+from sqlalchemy import func
 from app import db, task_queue
 from tasks import update_all_dividends_for_user
 from models import User, Holding, Dividend, Trade, recalculate_holdings
 from utils import calculate_dividend_metrics, get_dividend_allocation_data, get_dividend_months
-from stock_api import stock_api
+from stock_api import stock_api, US_STOCKS_LIST
 from flask_login import login_user, logout_user, current_user, login_required
 import logging
 
@@ -68,8 +68,7 @@ def dashboard():
     symbols = {h.symbol for h in holdings}
     price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
     profile_data_map = {s: stock_api.get_stock_profile(s) for s in symbols}
-
-    # Error Fix: Pass correct arguments to the function
+    
     dividend_metrics = calculate_dividend_metrics(holdings, price_data_map)
 
     total_investment = sum(h.quantity * h.purchase_price for h in holdings)
@@ -157,8 +156,7 @@ def dividends():
 
     symbols = {h.symbol for h in holdings}
     price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
-
-    # Error Fix: Pass correct arguments to the function
+    
     dividend_metrics = calculate_dividend_metrics(holdings, price_data_map)
     allocation_data = get_dividend_allocation_data(dividend_metrics)
     monthly_dividend_data = get_monthly_dividend_distribution(dividend_metrics)
@@ -171,15 +169,12 @@ def dividends():
 @main_bp.route('/dividends/history')
 @login_required
 def dividends_history():
-    # Enqueue background task
     if task_queue:
         task_queue.enqueue(update_all_dividends_for_user, current_user.id, job_timeout='10m')
 
-    # Fetch actual dividend records from the database
     page = request.args.get('page', 1, type=int)
     dividends_pagination = Dividend.query.filter_by(user_id=current_user.id).order_by(Dividend.dividend_date.desc()).paginate(page=page, per_page=20, error_out=False)
     
-    # Calculate total received
     total_received = db.session.query(func.sum(Dividend.amount)).filter_by(user_id=current_user.id).scalar() or 0
     
     return render_template('dividends_history.html', 
@@ -199,3 +194,35 @@ def allocation():
         if price_data and price_data.get('price') is not None:
             allocation_data.append({'symbol': h.symbol, 'value': h.quantity * price_data['price']})
     return render_template('allocation.html', allocation_data=allocation_data)
+
+@main_bp.route('/api/search-stocks')
+@login_required
+def search_stocks():
+    query = request.args.get('q', '').upper()
+    if not query:
+        return jsonify([])
+    
+    results = [
+        stock for stock in US_STOCKS_LIST 
+        if query in stock['ticker'].upper() or query in stock['name'].upper()
+    ]
+    
+    return jsonify(results[:10])
+
+@main_bp.route('/stock/<string:symbol>')
+@login_required
+def stock_detail(symbol):
+    symbol = symbol.upper()
+    profile = stock_api.get_stock_profile(symbol)
+    price_data = stock_api.get_stock_price(symbol)
+    price_history = stock_api.get_price_history(symbol, period='6mo')
+
+    if not price_data or not price_history:
+        flash(f'{symbol} 종목 정보를 가져오는 데 실패했습니다.', 'error')
+        return redirect(request.referrer or url_for('main.dashboard'))
+
+    return render_template('stock_detail.html', 
+                           symbol=symbol,
+                           profile=profile,
+                           price_data=price_data,
+                           price_history=price_history)
