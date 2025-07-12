@@ -14,6 +14,8 @@ import logging
 logger = logging.getLogger(__name__)
 main_bp = Blueprint('main', __name__)
 
+# ... (login, logout, signup 등 다른 라우트는 변경 없음) ...
+
 @main_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated: return redirect(url_for('main.dashboard'))
@@ -81,8 +83,6 @@ def dashboard():
     total_investment = sum(h.quantity * h.purchase_price for h in holdings)
     total_current_value = sum(h.quantity * (price_data_map.get(h.symbol, {}).get('price') or h.purchase_price) for h in holdings)
     
-    # --- 개선: 섹터 데이터 구조 변경 ---
-    # 각 섹터에 포함된 종목 정보를 저장하기 위한 구조
     sector_details = {}
     for h in holdings:
         profile = profile_data_map.get(h.symbol, {}); 
@@ -95,12 +95,11 @@ def dashboard():
         sector_details[sector]['total_value'] += current_value
         sector_details[sector]['holdings'].append({'symbol': h.symbol, 'value': current_value})
 
-    # Chart.js에 전달할 최종 데이터 구조
     sector_allocation = [
         {
             'sector': sector, 
             'value': details['total_value'],
-            'holdings': sorted(details['holdings'], key=lambda x: x['value'], reverse=True) # 금액 순으로 정렬
+            'holdings': sorted(details['holdings'], key=lambda x: x['value'], reverse=True)
         } 
         for sector, details in sector_details.items()
     ]
@@ -184,6 +183,12 @@ def dividends():
     price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
     
     dividend_metrics = calculate_dividend_metrics(holdings, price_data_map)
+    
+    # [에러 해결] 템플릿의 부담을 줄이기 위해, 라우트에서 배당 월 정보를 미리 계산하여 전달
+    for symbol, metrics in dividend_metrics.items():
+        dividend_info = get_dividend_months(symbol)
+        metrics['payout_months'] = dividend_info.get("months", [])
+    
     allocation_data = get_dividend_allocation_data(dividend_metrics)
     monthly_dividend_data = get_monthly_dividend_distribution(dividend_metrics)
 
