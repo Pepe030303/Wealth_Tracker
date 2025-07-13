@@ -44,10 +44,11 @@
 <div class="row">
     <div class="col-lg-7 mb-4">
         <div class="card h-100">
-            <div class="card-header"><h5 class="card-title mb-0">월별 배당금 현황 (지급일 기준)</h5></div>
+            {# 🛠️ 기능 추가: 대시보드에 월별 배당금 차트 추가 #}
+            <div class="card-header"><h5 class="card-title mb-0">월별 배당금 현황</h5></div>
             <div class="card-body">
                 <div class="chart-container" style="height: 300px;">
-                    <canvas id="monthlyDividendChart"></canvas>
+                    <canvas id="monthlyDividendChartDashboard"></canvas>
                 </div>
             </div>
         </div>
@@ -80,7 +81,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const sectorData = {{ sector_allocation|tojson }};
     const sectorCtx = document.getElementById('sectorAllocationChart')?.getContext('2d');
     const monthlyData = {{ monthly_dividend_data|tojson }};
-    const dividendCtx = document.getElementById('monthlyDividendChart')?.getContext('2d');
+    
+    // 🛠️ 리팩토링: 공통 함수를 사용하여 대시보드 차트 렌더링 (클릭 비활성화)
+    if (monthlyData) {
+        renderMonthlyDividendChart('monthlyDividendChartDashboard', monthlyData, false);
+    }
+
 
     if (sectorCtx && sectorData && sectorData.length > 0) {
         const totalPortfolioValue = sectorData.reduce((sum, sector) => sum + sector.value, 0);
@@ -127,48 +133,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         }
                     }
                 } 
-            }
-        });
-    }
-
-    {# 🛠️ 버그 수정: 중복되고 잘못된 차트 초기화 코드를 제거하고, 올바른 단일 차트 로직으로 수정합니다. #}
-    if (dividendCtx && monthlyData && monthlyData.monthly_totals) {
-        new Chart(dividendCtx, {
-            type: 'bar',
-            data: { 
-                labels: monthlyData.labels, 
-                datasets: [{
-                    label: '월별 배당금',
-                    data: monthlyData.monthly_totals, // 단순화된 데이터 사용
-                    backgroundColor: 'rgba(25, 135, 84, 0.6)',
-                    borderColor: 'rgba(25, 135, 84, 1)',
-                    borderWidth: 1,
-                    borderRadius: 8, // UI 일관성을 위해 둥근 모서리 적용
-                    borderSkipped: false,
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                layout: { padding: { top: 30 } }, // 라벨이 잘리지 않도록 여백 추가
-                plugins: {
-                    legend: { display: false }, // 범례 숨김
-                    tooltip: {
-                        callbacks: {
-                            label: (context) => `총액: $${context.parsed.y.toFixed(2)}`
-                        }
-                    },
-                    datalabels: { // 막대 상단에 값 표시
-                        anchor: 'end',
-                        align: 'top',
-                        formatter: (value) => value > 0 ? '$' + value.toFixed(2) : null,
-                        color: '#adb5bd',
-                        font: { weight: 'bold' }
-                    }
-                },
-                scales: { 
-                    x: { grid: { display: false } },
-                    y: { display: false, beginAtZero: true } // Y축 숨김
-                }
             }
         });
     }
