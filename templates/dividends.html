@@ -1,7 +1,5 @@
 {# 📄 templates/dividends.html #}
-
 {% extends "base.html" %}
-{# 🛠️ Refactoring: 매크로 파일 임포트 #}
 {% from 'macros.html' import render_stock_logo with context %}
 
 {% block title %}배당금 분석 - Wealth Tracker{% endblock %}
@@ -22,7 +20,6 @@
                     {% for symbol, metrics in dividend_metrics %}
                     <div class="list-group-item p-3">
                         <div class="d-flex align-items-center">
-                            {# 🛠️ Refactoring: 복잡한 if/else 블록을 매크로 호출로 변경 #}
                             <div class="me-3">
                                 {{ render_stock_logo(metrics.profile, symbol) }}
                             </div>
@@ -124,10 +121,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (monthlyCtx && monthlyData && monthlyData.datasets.length > 0) {
-        const monthlyTotals = monthlyData.datasets.reduce((acc, dataset) => {
-            dataset.data.forEach((value, i) => { acc[i] = (acc[i] || 0) + value; });
-            return acc;
-        }, []);
+        const monthlyTotals = monthlyData.datasets[0].data;
         
         const monthlyChart = new Chart(monthlyCtx, {
             type: 'bar', 
@@ -172,12 +166,15 @@ document.addEventListener('DOMContentLoaded', function () {
         
         function renderMonthlyDetails(index) {
             const monthName = monthlyData.labels[index];
-            const dataForMonth = detailedData[index] || [];
+            let dataForMonth = detailedData[index] || [];
             
             if (dataForMonth.length === 0) {
                 monthlyDetailContainer.classList.add('d-none');
                 return;
             }
+
+            // 🛠️ 기능 개선: 배당락일 기준 오름차순 정렬
+            dataForMonth.sort((a, b) => new Date(a.ex_dividend_date) - new Date(b.ex_dividend_date));
             
             const totalForMonth = dataForMonth.reduce((sum, item) => sum + item.amount, 0);
             
@@ -186,16 +183,25 @@ document.addEventListener('DOMContentLoaded', function () {
             
             dataForMonth.forEach(item => {
                 const logoUrl = item.profile?.logo_url || `https://via.placeholder.com/32/cccccc/FFFFFF?text=${item.symbol[0]}`;
+                const exDay = new Date(item.ex_dividend_date).getDate();
+
+                // 🛠️ 기능 개선: 배당락일 'DD' 표시 및 상세 정보 UI 개선
                 const itemHtml = `
                 <div class="list-group-item d-flex align-items-center p-2 bg-transparent">
+                    <span class="badge bg-secondary-subtle text-secondary-emphasis rounded-pill me-3 p-2" style="width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; font-size: 1rem;">
+                        ${exDay}
+                    </span>
                     <img src="${logoUrl}" class="stock-logo me-3" alt="${item.symbol} logo" loading="lazy" onerror="this.onerror=null; this.src='https://via.placeholder.com/32/cccccc/FFFFFF?text=${item.symbol[0]}';">
                     <div class="flex-grow-1">
                         <div class="d-flex justify-content-between">
                             <strong class="mb-0">${item.symbol}</strong>
-                            <small class="text-muted">${item.quantity.toFixed(2)}주 @ $${item.dps_per_payout.toFixed(4)}/주</small>
+                            <strong class="text-success fs-5 ms-3">$${item.amount.toFixed(2)}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                           <small class="company-name text-muted">${item.profile?.name || ''}</small>
+                           <small class="text-muted text-nowrap">${item.quantity.toFixed(2)}주 @ $${item.dps_per_payout.toFixed(4)}</small>
                         </div>
                     </div>
-                    <strong class="text-success fs-5 ms-3">$${item.amount.toFixed(2)}</strong>
                 </div>`;
                 monthlyDetailContent.innerHTML += itemHtml;
             });
