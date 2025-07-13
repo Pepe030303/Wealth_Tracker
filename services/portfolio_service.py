@@ -19,9 +19,8 @@ def get_monthly_dividend_distribution(dividend_metrics):
             continue
             
         for payout in payout_schedule:
-            # 🛠️ 변경: 집계 기준을 정확한 지급일(pay_date)로 사용
             if not payout.get('pay_date'):
-                continue # 지급일 정보가 없으면 건너뜀
+                continue 
                 
             payout_date = datetime.strptime(payout['pay_date'], '%Y-%m-%d')
             month_index = payout_date.month - 1
@@ -40,9 +39,11 @@ def get_monthly_dividend_distribution(dividend_metrics):
     for month, items in detailed_monthly_data.items():
         monthly_totals[month] = sum(item['amount'] for item in items)
 
+    # 🛠️ 버그 수정: 대시보드 차트를 위해 데이터 구조를 datasets에서 단순 배열로 변경
     return {
         'labels': [f"{i+1}월" for i in range(12)],
-        'datasets': [{'data': monthly_totals}],
+        'datasets': [{'data': monthly_totals}], # dividends.html 호환성 유지
+        'monthly_totals': monthly_totals, # dashboard.html 을 위한 단순 데이터
         'detailed_data': detailed_monthly_data
     }
 
