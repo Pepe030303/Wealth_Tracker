@@ -27,7 +27,6 @@ def load_us_stocks_data():
     global US_STOCKS_LIST
     if US_STOCKS_LIST: return
     try:
-        # ... (기존과 동일)
         file_exists = os.path.exists(US_STOCKS_FILE)
         if file_exists:
             file_mod_time = datetime.fromtimestamp(os.path.getmtime(US_STOCKS_FILE))
@@ -72,11 +71,9 @@ class StockAPIService:
         if not self.cache: return
         self.cache.setex(key, self.cache_ttl, json.dumps(value))
 
-    # 🛠️ 개선: 여러 종목의 가격 정보를 한번에 가져오는 벌크 메서드
     def get_stock_prices_bulk(self, symbols: list):
         if not symbols: return {}
         
-        # Redis에서 캐시된 데이터를 먼저 확인
         results = {}
         symbols_to_fetch = []
         for symbol in symbols:
@@ -90,12 +87,12 @@ class StockAPIService:
         if not symbols_to_fetch:
             return results
 
-        # 캐시가 없는 종목들에 대해 yfinance 벌크 호출
         try:
             tickers_str = " ".join(symbols_to_fetch)
             tickers = yf.Tickers(tickers_str)
             for symbol, ticker_obj in tickers.tickers.items():
-                hist = ticker_obj.history(period="2d", auto_adjust=True, progress=False)
+                # 🛠️ Fixed: 'progress' 인수는 yf.Tickers() 내의 개별 history() 호출에서 지원되지 않으므로 제거합니다.
+                hist = ticker_obj.history(period="2d", auto_adjust=True)
                 if not hist.empty and len(hist) >= 2:
                     price_data = {
                         'price': float(hist['Close'].iloc[-1]),
@@ -105,7 +102,7 @@ class StockAPIService:
                 elif not hist.empty:
                     price_data = {'price': float(hist['Close'].iloc[-1]), 'change': 0, 'change_percent': 0}
                 else:
-                    continue # 데이터가 없으면 건너뜀
+                    continue
 
                 results[symbol] = price_data
                 self._set_to_redis_cache(f"price:{symbol}", price_data)
@@ -116,7 +113,6 @@ class StockAPIService:
 
         return results
         
-    # 🛠️ 개선: 여러 종목의 프로필 정보를 한번에 가져오는 벌크 메서드
     def get_stock_profiles_bulk(self, symbols: list):
         if not symbols: return {}
 
@@ -138,7 +134,6 @@ class StockAPIService:
             tickers = yf.Tickers(tickers_str)
             for symbol, ticker_obj in tickers.tickers.items():
                 try:
-                    # 개별 티커에 대한 .info 호출은 여전히 필요
                     info = ticker_obj.info
                     profile_data = {
                         'name': info.get('longName', symbol),
@@ -155,12 +150,9 @@ class StockAPIService:
 
         return results
 
-    # 단일 조회 메서드는 검색 상세 페이지 등을 위해 유지
     def get_stock_price(self, symbol):
-        # ... (기존 로직 유지, 단 Rate limit 방지를 위해 sleep 추가)
-        time.sleep(0.1) # 짧은 딜레이 추가
+        time.sleep(0.1)
         cache_key = f"price:{symbol}"
-        # ... (이하 로직 동일)
         cached_price = self._get_from_redis_cache(cache_key)
         if cached_price: return cached_price
         
@@ -183,7 +175,6 @@ class StockAPIService:
                 return None
         except Exception as e:
             logger.error(f"yfinance 가격 조회 실패 ({symbol}): {e}")
-            # 🛠️ Fixed: API 실패 시 DB 캐시 객체를 그대로 반환하도록 수정
             if db_cached:
                 return {'price': db_cached.current_price, 'change': db_cached.change, 'change_percent': db_cached.change_percent}
             return None
@@ -193,10 +184,8 @@ class StockAPIService:
         return price_data
 
     def get_stock_profile(self, symbol):
-        # ... (기존 로직 유지, 단 Rate limit 방지를 위해 sleep 추가)
-        time.sleep(0.1) # 짧은 딜레이 추가
+        time.sleep(0.1)
         cache_key = f"profile:{symbol}"
-        # ... (이하 로직 동일)
         cached_profile = self._get_from_redis_cache(cache_key)
         if cached_profile: return cached_profile
 
@@ -214,7 +203,6 @@ class StockAPIService:
         self._set_to_redis_cache(cache_key, profile_data)
         return profile_data
 
-    # ... (기타 메서드)
     def _update_db_cache(self, symbol, price_data):
         with db.session.no_autoflush:
             cached = StockPrice.query.filter_by(symbol=symbol).first()
