@@ -34,38 +34,37 @@ def calculate_dividend_metrics(holdings, price_data_map):
         cache_key = f"dividend_metrics:{symbol}"
         
         cached_data = get_from_redis_cache(cache_key)
+        annual_dps = 0
+
         if cached_data:
             # 캐시된 DPS를 사용해 현재 보유량에 맞게 재계산
             annual_dps = cached_data.get('annual_dps', 0)
-            if annual_dps > 0:
+        else:
+            try:
+                ticker = yf.Ticker(symbol)
+                info = ticker.info
+                
+                annual_dps = float(info.get('trailingAnnualDividendRate') or info.get('dividendRate') or 0)
                 current_price = price_data_map.get(symbol, {}).get('price')
-                dividend_metrics[symbol] = {
-                    'expected_annual_dividend': annual_dps * h.quantity,
-                    'dividend_yield': (annual_dps / current_price) * 100 if current_price else 0
-                }
-            continue
 
-        try:
-            ticker = yf.Ticker(symbol)
-            info = ticker.info
-            
-            annual_dps = float(info.get('trailingAnnualDividendRate') or info.get('dividendRate') or 0)
-            current_price = price_data_map.get(symbol, {}).get('price')
+                if annual_dps == 0 and info.get('yield') and current_price:
+                    annual_dps = float(info['yield']) * current_price
 
-            if annual_dps == 0 and info.get('yield') and current_price:
-                annual_dps = float(info['yield']) * current_price
-
-            if annual_dps > 0:
-                dividend_yield = (annual_dps / current_price) * 100 if current_price else 0
-                dividend_metrics[symbol] = {
-                    'expected_annual_dividend': annual_dps * h.quantity,
-                    'dividend_yield': dividend_yield
-                }
                 # 캐시에 주당 배당금(DPS)만 저장하여 재사용
-                set_to_redis_cache(cache_key, {'annual_dps': annual_dps})
-        except Exception as e:
-            logger.warning(f"({symbol}) 배당 지표 계산 실패: {e}")
-            continue
+                if annual_dps > 0:
+                    set_to_redis_cache(cache_key, {'annual_dps': annual_dps})
+            except Exception as e:
+                logger.warning(f"({symbol}) 배당 지표 계산 실패: {e}")
+                continue
+
+        if annual_dps > 0:
+            current_price = price_data_map.get(symbol, {}).get('price')
+            dividend_yield = (annual_dps / current_price) * 100 if current_price else 0
+            dividend_metrics[symbol] = {
+                'expected_annual_dividend': annual_dps * h.quantity,
+                'dividend_yield': dividend_yield,
+                'dividend_per_share': annual_dps, # 🛠️ 1주당 배당금 정보 추가
+            }
             
     return dividend_metrics
 
