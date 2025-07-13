@@ -44,9 +44,12 @@
 <div class="row">
     <div class="col-lg-7 mb-4">
         <div class="card h-100">
-            <div class="card-header"><h5 class="card-title mb-0">월별 예상 배당금</h5></div>
+            <div class="card-header"><h5 class="card-title mb-0">월별 배당금 현황</h5></div>
             <div class="card-body">
-                <canvas id="monthlyDividendChart" style="height: 300px;"></canvas>
+                {# 🛠️ UI 개선: 차트 컨테이너로 감싸서 높이 보장 #}
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="monthlyDividendChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
@@ -81,25 +84,15 @@ document.addEventListener('DOMContentLoaded', function () {
     const dividendCtx = document.getElementById('monthlyDividendChart')?.getContext('2d');
 
     if (sectorCtx && sectorData && sectorData.length > 0) {
-        // [차트 개선] 섹터 트리맵 차트 로직 전면 수정
         const totalPortfolioValue = sectorData.reduce((sum, sector) => sum + sector.value, 0);
-
         new Chart(sectorCtx, {
             type: 'treemap',
             data: { 
                 datasets: [{
-                    // [오류 수정] 데이터 구조를 단순화하고 필요한 모든 정보를 명시적으로 포함
-                    tree: sectorData,
-                    key: 'value', // 차트 크기 기준
-                    groups: ['sector'], // 그룹화 기준
-                    // 데이터 라벨 설정 (차트 내부에 표시될 텍스트)
+                    tree: sectorData, key: 'value', groups: ['sector'], 
                     labels: {
-                        display: true,
-                        color: 'white',
-                        font: { size: 16, weight: 'bold' },
-                        // [가독성 개선] 배경색과 대비되는 텍스트 테두리 추가
-                        textStrokeColor: 'rgba(0,0,0,0.6)',
-                        textStrokeWidth: 2,
+                        display: true, color: 'white', font: { size: 16, weight: 'bold' },
+                        textStrokeColor: 'rgba(0,0,0,0.6)', textStrokeWidth: 2,
                         formatter(context) {
                             if (context.raw) {
                                 const item = context.raw;
@@ -109,7 +102,6 @@ document.addEventListener('DOMContentLoaded', function () {
                             return null;
                         }
                     },
-                    // 각 섹터별 배경색
                     backgroundColor: (ctx) => {
                         const colors = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0', '#6f42c1', '#fd7e14'];
                         if (ctx.type === 'dataset') return 'transparent';
@@ -120,22 +112,13 @@ document.addEventListener('DOMContentLoaded', function () {
             options: {
                 plugins: {
                     legend: { display: false },
-                    // [가독성 개선] 툴팁(마우스 오버) 설정
                     tooltip: {
-                        // [가독성 개선] 폰트 크기 조정
-                        titleFont: { size: 14, weight: 'bold' },
-                        bodyFont: { size: 12 },
+                        titleFont: { size: 14, weight: 'bold' }, bodyFont: { size: 12 },
                         callbacks: {
-                            title: function(tooltipItems) {
-                                const item = tooltipItems[0].raw;
-                                return `${item.g} | $${item.v.toFixed(2)}`;
-                            },
-                            // [오류 수정] 툴팁 본문에 상세 종목 정보 표시
+                            title: function(tooltipItems) { return `${tooltipItems[0].raw.g} | $${tooltipItems[0].raw.v.toFixed(2)}`; },
                             label: function(context) {
-                                const item = context.raw;
-                                const holdings = item._data.holdings || [];
+                                const item = context.raw; const holdings = item._data.holdings || [];
                                 let holdingsText = ['\nHoldings:'];
-                                
                                 holdings.forEach(h => {
                                     const percentage = (h.value / item.v * 100).toFixed(1);
                                     holdingsText.push(`  ${h.symbol}: $${h.value.toFixed(2)} (${percentage}%)`);
@@ -150,17 +133,23 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (dividendCtx && monthlyData && monthlyData.datasets.length > 0) {
-        // ... (월별 배당금 차트 로직은 이전 요청에서 완료되어 변경 없음) ...
+        // 🛠️ UI 개선: 대시보드 차트 스타일을 배당금 페이지와 통일
         new Chart(dividendCtx, {
             type: 'bar',
             data: { labels: monthlyData.labels, datasets: monthlyData.datasets },
             options: {
-                responsive: true, maintainAspectRatio: false, layout: { padding: { top: 30 } },
+                responsive: true, maintainAspectRatio: false,
+                // 🛠️ 버그 수정: 라벨이 잘리지 않도록 상단에 여백 추가
+                layout: { padding: { top: 30 } },
                 plugins: {
                     legend: { display: true, position: 'bottom' },
                     datalabels: {
-                        display: context => context.datasetIndex === context.chart.data.datasets.length - 1 && context.chart.data.datasets[context.datasetIndex].data[context.dataIndex] > 0,
-                        formatter: (value, context) => { let total = 0; context.chart.data.datasets.forEach(ds => { total += ds.data[context.dataIndex]; }); return total > 0 ? '$' + total.toFixed(2) : null; },
+                        // 스택의 총합을 계산하여 최상단에만 표시
+                        display: context => context.datasetIndex === context.chart.data.datasets.length - 1,
+                        formatter: (value, context) => { 
+                            let total = context.chart.data.datasets.reduce((sum, ds) => sum + ds.data[context.dataIndex], 0);
+                            return total > 0 ? '$' + total.toFixed(2) : null; 
+                        },
                         anchor: 'end', align: 'top', color: '#adb5bd', font: { weight: 'bold' }
                     },
                     tooltip: {
@@ -168,11 +157,16 @@ document.addEventListener('DOMContentLoaded', function () {
                         callbacks: {
                             title: (tooltipItems) => `2025년 ${tooltipItems[0].label}`,
                             label: (context) => { const label = context.dataset.label || ''; const value = context.parsed.y; if (value === 0) return null; const total = context.chart.data.datasets.reduce((sum, ds) => sum + ds.data[context.dataIndex], 0); const percentage = total > 0 ? (value / total * 100).toFixed(1) : 0; return `${label}: $${value.toFixed(2)} (${percentage}%)`; },
-                            footer: (tooltipItems) => { let total = 0; tooltipItems.forEach(item => { total += item.parsed.y; }); return '총액: $' + total.toFixed(2); }
+                            footer: (tooltipItems) => { let total = tooltipItems.reduce((sum, item) => sum + item.parsed.y, 0); return '총액: $' + total.toFixed(2); }
                         }
                     }
                 },
-                scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { callback: (v) => '$' + v.toFixed(0) } } }
+                scales: { 
+                    x: { stacked: true, grid: { display: false } },
+                    // 🛠️ UI 개선: Y축 제거
+                    y: { stacked: true, display: false, beginAtZero: true } 
+                },
+                // 🛠️ UI 개선: 대시보드에서는 클릭 이벤트 없음
             }
         });
     }
