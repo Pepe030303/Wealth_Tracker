@@ -1,6 +1,9 @@
 {# 📄 templates/holdings.html #}
 
 {% extends "base.html" %}
+{# 🛠️ Refactoring: 매크로 파일 임포트 #}
+{% from 'macros.html' import render_stock_logo with context %}
+
 {% block title %}보유 종목 - Wealth Tracker{% endblock %}
 {% block content %}
 <div class="row">
@@ -20,18 +23,10 @@
                     <div class="row align-items-center g-3">
                         {# 좌측: 종목 로고, 심볼, 이름 #}
                         <div class="col-lg-3 d-flex align-items-center">
-                            {# 🛠️ 개선: 프로필 이미지 표시, lazy loading, onerror fallback 적용 #}
-                            {% if data.profile and data.profile.logo_url %}
-                                <img src="{{ data.profile.logo_url }}" 
-                                     class="stock-logo" 
-                                     alt="{{ data.holding.symbol }} logo"
-                                     loading="lazy"
-                                     onerror="this.onerror=null; this.src='https://via.placeholder.com/32/cccccc/FFFFFF?text={{ data.holding.symbol[0] }}';">
-                            {% else %}
-                                <div class="stock-logo placeholder">
-                                    <span>{{ data.holding.symbol[0] }}</span>
-                                </div>
-                            {% endif %}
+                            {# 🛠️ Refactoring: 복잡한 if/else 블록을 매크로 호출로 변경 #}
+                            <div class="me-3">
+                                {{ render_stock_logo(data.profile, data.holding.symbol) }}
+                            </div>
                             <div>
                                 <h5 class="mb-0 fw-bold">{{ data.holding.symbol }}</h5>
                                 <span class="company-name">{{ data.profile.name if data.profile else 'N/A' }}</span>
