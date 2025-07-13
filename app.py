@@ -3,7 +3,7 @@
 import os
 import logging
 from datetime import datetime
-from flask import Flask
+from flask import Flask, g
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -12,6 +12,9 @@ import redis
 from rq import Queue
 
 logging.basicConfig(level=logging.INFO)
+
+# 🛠️ 기능 추가: 프로젝트 버전 관리
+APP_VERSION = "v1.0.1" 
 
 class Base(DeclarativeBase): pass
 db = SQLAlchemy(model_class=Base)
@@ -39,14 +42,17 @@ login_manager.login_view = 'main.login'
 login_manager.login_message = "로그인이 필요한 페이지입니다."
 login_manager.login_message_category = "info"
 
+# 🛠️ 기능 추가: 모든 템플릿에서 버전을 사용할 수 있도록 컨텍스트 프로세서 추가
+@app.context_processor
+def inject_version():
+    return dict(app_version=APP_VERSION)
+
 @app.template_filter('strftime')
 def strftime_filter(dt, fmt='%Y-%m-%d'):
     if isinstance(dt, str): return datetime.now().strftime(fmt) if dt == 'now' else dt
     if dt is None: return ""
     return dt.strftime(fmt)
 
-# [에러 해결] Jinja2 필터는 단순한 데이터 변환 역할만 수행하도록 수정
-# 이제 이 필터는 'get_dividend_months' 함수를 직접 호출하지 않고, 월 이름 리스트를 받아 한글로 변환합니다.
 @app.template_filter('korean_dividend_months')
 def korean_dividend_months_filter(month_names):
     if not isinstance(month_names, list):
