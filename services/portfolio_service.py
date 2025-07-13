@@ -12,8 +12,9 @@ def get_monthly_dividend_distribution(dividend_metrics):
     detailed_monthly_data = {i: [] for i in range(12)}
     
     for symbol, metrics in dividend_metrics.items():
-        # 🛠️ 개선: 상세 배당 지급 일정을 가져오는 함수 호출
-        payout_schedule = get_dividend_payout_schedule(symbol)
+        # 🛠️ Refactoring: 반환된 딕셔너리에서 'payouts' 리스트를 직접 사용
+        dividend_schedule = get_dividend_payout_schedule(symbol)
+        payout_schedule = dividend_schedule['payouts']
         
         if not payout_schedule:
             continue
@@ -22,7 +23,6 @@ def get_monthly_dividend_distribution(dividend_metrics):
             payout_date = datetime.strptime(payout['date'], '%Y-%m-%d')
             month_index = payout_date.month - 1
             
-            # 🛠️ 개선: 상세 데이터에 배당락일 및 주당 배당금 정보 추가
             detailed_monthly_data[month_index].append({
                 'symbol': symbol,
                 'amount': payout['amount'] * metrics.get('quantity', 0),
@@ -32,15 +32,14 @@ def get_monthly_dividend_distribution(dividend_metrics):
                 'ex_dividend_date': payout['date']
             })
 
-    # 월별 총합 계산
     monthly_totals = [0] * 12
     for month, items in detailed_monthly_data.items():
         monthly_totals[month] = sum(item['amount'] for item in items)
 
     return {
         'labels': [f"{i+1}월" for i in range(12)],
-        'datasets': [{'data': monthly_totals}], # 차트용 데이터는 월별 총합만 필요
-        'detailed_data': detailed_monthly_data # 클릭 시 사용할 상세 데이터
+        'datasets': [{'data': monthly_totals}],
+        'detailed_data': detailed_monthly_data
     }
 
 
@@ -63,11 +62,9 @@ def get_portfolio_analysis_data(user_id):
         quantity = h.quantity if h else 0
         current_value = current_price * quantity
         
-        # utils.get_dividend_months()를 직접 호출하는 대신, payout_schedule에서 월 정보를 유추하도록 변경
-        payout_schedule = get_dividend_payout_schedule(symbol)
-        payout_months_num = sorted(list(set(datetime.strptime(p['date'], '%Y-%m-%d').month for p in payout_schedule)))
-        MONTH_MAP = {1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'}
-        metrics['payout_months'] = [MONTH_MAP[m] for m in payout_months_num]
+        # 🛠️ Refactoring: 복잡한 계산 로직을 제거하고, 반환된 딕셔너리에서 'months'를 직접 사용
+        dividend_schedule = get_dividend_payout_schedule(symbol)
+        metrics['payout_months'] = dividend_schedule['months']
 
         metrics['profile'] = profile_data_map.get(symbol, {})
         metrics['quantity'] = quantity
