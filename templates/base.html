@@ -84,7 +84,6 @@
                                 <i class="fas fa-coins me-1"></i>배당금
                             </a>
                             <ul class="dropdown-menu" aria-labelledby="dividendDropdown">
-                                <!-- 🛠️ UI 개선: 메뉴 문구를 '배당금 분석'으로 변경하여 페이지 제목과 통일 -->
                                 <li><a class="dropdown-item" href="{{ url_for('main.dividends') }}">배당금 분석</a></li>
                                 <li><a class="dropdown-item" href="{{ url_for('main.dividends_history') }}">배당금 내역</a></li>
                             </ul>
@@ -140,7 +139,8 @@
 
     <footer class="bg-dark text-white-50 mt-auto py-3">
         <div class="container text-center">
-            <small>© 2025 Wealth Tracker. All Rights Reserved.</small>
+            {# 🛠️ UI 개선: 푸터에 버전 정보 추가 #}
+            <small>© 2025 Wealth Tracker. All Rights Reserved. | Version: {{ app_version }}</small>
         </div>
     </footer>
 
