@@ -46,6 +46,7 @@
         <div class="card h-100">
             <div class="card-header"><h5 class="card-title mb-0">월별 배당금 현황</h5></div>
             <div class="card-body">
+                {# 🛠️ UI 개선: 차트 컨테이너로 감싸서 높이 보장 #}
                 <div class="chart-container" style="height: 300px;">
                     <canvas id="monthlyDividendChart"></canvas>
                 </div>
@@ -132,6 +133,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (dividendCtx && monthlyData && monthlyData.datasets.length > 0) {
+
         const monthlyTotals = monthlyData.datasets.reduce((acc, dataset) => {
             dataset.data.forEach((value, i) => { acc[i] = (acc[i] || 0) + value; });
             return acc;
@@ -153,22 +155,48 @@ document.addEventListener('DOMContentLoaded', function () {
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
+
+        // 🛠️ UI 개선: 대시보드 차트 스타일을 배당금 페이지와 통일
+        new Chart(dividendCtx, {
+            type: 'bar',
+            data: { labels: monthlyData.labels, datasets: monthlyData.datasets },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                // 🛠️ 버그 수정: 라벨이 잘리지 않도록 상단에 여백 추가
+
                 layout: { padding: { top: 30 } },
                 plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: { label: (context) => `총액: $${context.parsed.y.toFixed(2)}` }
-                    },
+                    legend: { display: true, position: 'bottom' },
                     datalabels: {
-                        anchor: 'end', align: 'top',
-                        formatter: (value) => value > 0 ? '$' + value.toFixed(2) : null,
-                        color: '#adb5bd', font: { weight: 'bold' }
+                        // 스택의 총합을 계산하여 최상단에만 표시
+                        display: context => context.datasetIndex === context.chart.data.datasets.length - 1,
+                        formatter: (value, context) => { 
+                            let total = context.chart.data.datasets.reduce((sum, ds) => sum + ds.data[context.dataIndex], 0);
+                            return total > 0 ? '$' + total.toFixed(2) : null; 
+                        },
+                        anchor: 'end', align: 'top', color: '#adb5bd', font: { weight: 'bold' }
+                    },
+                    tooltip: {
+                        mode: 'index', intersect: false,
+                        callbacks: {
+                            title: (tooltipItems) => `2025년 ${tooltipItems[0].label}`,
+                            label: (context) => { const label = context.dataset.label || ''; const value = context.parsed.y; if (value === 0) return null; const total = context.chart.data.datasets.reduce((sum, ds) => sum + ds.data[context.dataIndex], 0); const percentage = total > 0 ? (value / total * 100).toFixed(1) : 0; return `${label}: $${value.toFixed(2)} (${percentage}%)`; },
+                            footer: (tooltipItems) => { let total = tooltipItems.reduce((sum, item) => sum + item.parsed.y, 0); return '총액: $' + total.toFixed(2); }
+                        }
                     }
                 },
                 scales: { 
+
                     x: { grid: { display: false } },
                     y: { display: false, beginAtZero: true }
                 }
+
+                    x: { stacked: true, grid: { display: false } },
+                    // 🛠️ UI 개선: Y축 제거
+                    y: { stacked: true, display: false, beginAtZero: true } 
+                },
+                // 🛠️ UI 개선: 대시보드에서는 클릭 이벤트 없음
+
             }
         });
     }
