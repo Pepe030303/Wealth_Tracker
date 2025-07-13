@@ -111,19 +111,25 @@ document.addEventListener('DOMContentLoaded', function () {
     if (allocationCtx && allocationData && allocationData.length > 0) {
         const totalDividend = allocationData.reduce((sum, item) => sum + item.value, 0);
         new Chart(allocationCtx, {
-            type: 'doughnut', // 🛠️ 원형 -> 도넛 차트로 변경
+            type: 'doughnut',
             data: { labels: allocationData.map(i => i.symbol), datasets: [{ data: allocationData.map(i => i.value), backgroundColor: ['#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2'], borderColor: '#343a40' }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' }, tooltip: { callbacks: { label: function(context) { const label = context.label || ''; const value = context.parsed; const percentage = (value / totalDividend * 100).toFixed(2); return ` ${label}: $${value.toFixed(2)} (${percentage}%)`; } } } } }
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                plugins: { 
+                    legend: { position: 'right' }, 
+                    // 🛠️ 개선: 툴팁에만 정보 표시하고, 차트 위 텍스트는 제거
+                    datalabels: { display: false },
+                    tooltip: { callbacks: { label: function(context) { const label = context.label || ''; const value = context.parsed; const percentage = (value / totalDividend * 100).toFixed(2); return ` ${label}: $${value.toFixed(2)} (${percentage}%)`; } } } 
+                } 
+            }
         });
     }
 
     // --- 2. 월별 배당금 막대 차트 ---
     if (monthlyCtx && monthlyData && monthlyData.datasets.length > 0) {
-        // 🛠️ 차트 데이터를 월별 총합으로 단순화
         const monthlyTotals = monthlyData.datasets.reduce((acc, dataset) => {
-            dataset.data.forEach((value, i) => {
-                acc[i] = (acc[i] || 0) + value;
-            });
+            dataset.data.forEach((value, i) => { acc[i] = (acc[i] || 0) + value; });
             return acc;
         }, []);
         
@@ -132,24 +138,18 @@ document.addEventListener('DOMContentLoaded', function () {
             data: { 
                 labels: monthlyData.labels, 
                 datasets: [{
-                    label: '월별 배당금',
-                    data: monthlyTotals,
-                    backgroundColor: 'rgba(25, 135, 84, 0.6)',
-                    borderColor: 'rgba(25, 135, 84, 1)',
-                    borderWidth: 1,
-                    borderRadius: 8, // 🛠️ 둥근 막대 그래프
-                    borderSkipped: false,
+                    label: '월별 배당금', data: monthlyTotals,
+                    backgroundColor: 'rgba(25, 135, 84, 0.6)', borderColor: 'rgba(25, 135, 84, 1)',
+                    borderWidth: 1, borderRadius: 8, borderSkipped: false,
                 }]
             },
             options: { 
                 responsive: true, maintainAspectRatio: false,
+                // 🛠️ 버그 수정: 라벨이 잘리지 않도록 상단에 여백 추가
+                layout: { padding: { top: 30 } },
                 plugins: { 
                     legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: (context) => `총액: $${context.parsed.y.toFixed(2)}`
-                        }
-                    },
+                    tooltip: { callbacks: { label: (context) => `총액: $${context.parsed.y.toFixed(2)}` } },
                     datalabels: {
                         anchor: 'end', align: 'top',
                         formatter: (value) => value > 0 ? '$' + value.toFixed(2) : null,
@@ -158,9 +158,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 }, 
                 scales: { 
                     x: { grid: { display: false } },
-                    y: { display: false, beginAtZero: true } // 🛠️ Y축 제거
+                    y: { display: false, beginAtZero: true }
                 },
-                // 🛠️ 클릭 이벤트 핸들러 추가
                 onClick: (event, elements) => {
                     if (elements.length > 0) {
                         const index = elements[0].index;
@@ -193,22 +192,22 @@ document.addEventListener('DOMContentLoaded', function () {
             
             dataForMonth.forEach(item => {
                 const logoUrl = item.profile?.logo_url || `https://via.placeholder.com/32/667eea/FFFFFF?text=${item.symbol[0]}`;
-                const companyName = item.profile?.name || 'N/A';
-
+                // 🛠️ 개선: 상세 정보에 수량 및 주당 배당금 추가
                 const itemHtml = `
-                <div class="list-group-item d-flex align-items-center p-2">
-                    <img src="${logoUrl}" class="stock-logo me-3" alt="${item.symbol} logo" onerror="this.onerror=null; this.src='https...';">
+                <div class="list-group-item d-flex align-items-center p-2 bg-transparent">
+                    <img src="${logoUrl}" class="stock-logo me-3" alt="${item.symbol} logo" onerror="this.onerror=null; this.src='https://via.placeholder.com/32/667eea/FFFFFF?text=${item.symbol[0]}';">
                     <div class="flex-grow-1">
-                        <strong class="mb-0">${item.symbol}</strong>
-                        <div class="company-name">${companyName}</div>
+                        <div class="d-flex justify-content-between">
+                            <strong class="mb-0">${item.symbol}</strong>
+                            <small class="text-muted">${item.quantity.toFixed(2)}주 @ $${item.dps_per_payout.toFixed(4)}/주</small>
+                        </div>
                     </div>
-                    <strong class="text-success fs-5">$${item.amount.toFixed(2)}</strong>
+                    <strong class="text-success fs-5 ms-3">$${item.amount.toFixed(2)}</strong>
                 </div>`;
                 monthlyDetailContent.innerHTML += itemHtml;
             });
 
             monthlyDetailContainer.classList.remove('d-none');
-            // UX 개선: 상세 뷰로 스크롤
             monthlyDetailContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
 
