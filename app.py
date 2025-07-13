@@ -14,7 +14,7 @@ from rq import Queue
 logging.basicConfig(level=logging.INFO)
 
 # 🛠️ 기능 추가: 프로젝트 버전 관리
-APP_VERSION = "v1.0.1" 
+APP_VERSION = "v1.1.0" 
 
 class Base(DeclarativeBase): pass
 db = SQLAlchemy(model_class=Base)
@@ -42,7 +42,6 @@ login_manager.login_view = 'main.login'
 login_manager.login_message = "로그인이 필요한 페이지입니다."
 login_manager.login_message_category = "info"
 
-# 🛠️ 기능 추가: 모든 템플릿에서 버전을 사용할 수 있도록 컨텍스트 프로세서 추가
 @app.context_processor
 def inject_version():
     return dict(app_version=APP_VERSION)
