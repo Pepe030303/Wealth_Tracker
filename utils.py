@@ -8,8 +8,8 @@ import json
 import requests
 from redis import Redis
 from models import StockPrice
-# 🛠️ 변경: Finnhub API 키를 stock_api 모듈에서 가져옵니다.
-from stock_api import FINNHUB_API_KEY
+# 🛠️ 변경: Polygon.io API 키를 stock_api 모듈에서 가져옵니다.
+from stock_api import POLYGON_API_KEY
 
 try:
     from app import conn as redis_conn
@@ -33,38 +33,21 @@ def calculate_dividend_metrics(holdings, price_data_map):
     dividend_metrics = {}
     for h in holdings:
         symbol = h.symbol.upper()
-        # 🛠️ 변경: 배당금 계산 로직을 yfinance가 아닌 Finnhub 데이터 기반으로 변경합니다.
-        # 연간 주당 배당금(annual_dps)을 Finnhub 데이터에서 직접 가져오거나, 최근 1년치 배당을 합산하여 계산합니다.
         
-        # 1. Finnhub에서 배당 데이터 가져오기
         dividend_data = get_dividend_payout_schedule(symbol)
         payouts = dividend_data.get('payouts', [])
         
         if not payouts:
             continue
 
-        # 2. 연간 주당 배당금(annual_dps) 계산
-        # 가장 최근 배당금과 빈도를 사용하여 연간 배당금 추정
+        # 🛠️ 개선: 최근 1년간 실제 지급된 배당금의 합으로 연간 배당금(annual_dps)을 계산하여 정확도 향상
         annual_dps = 0
         if payouts:
-            # Finnhub 응답은 최신순으로 오므로 첫번째 항목 사용
-            last_payout = payouts[0]
-            frequency = last_payout.get('frequency', 'quarterly') # 기본값을 분기로 설정
-            
-            multiplier = 4 # 분기
-            if frequency == 'semi-annual': multiplier = 2
-            elif frequency == 'annual': multiplier = 1
-            elif frequency == 'monthly': multiplier = 12
-            
-            # 일부 데이터는 frequency가 없어, 최근 1년치 합산으로 대체
             one_year_ago = datetime.now() - timedelta(days=365)
-            recent_payouts = [p for p in payouts if datetime.strptime(p.get('pay_date', p.get('ex_date')), '%Y-%m-%d') > one_year_ago]
+            recent_payouts = [p for p in payouts if p.get('pay_date') and datetime.strptime(p['pay_date'], '%Y-%m-%d') > one_year_ago]
             
             if len(recent_payouts) > 0:
                 annual_dps = sum(p['amount'] for p in recent_payouts)
-            elif 'amount' in last_payout: # 1년치 데이터가 없으면 추정
-                 annual_dps = last_payout['amount'] * multiplier
-
 
         if annual_dps > 0:
             price_data = price_data_map.get(symbol)
@@ -81,59 +64,57 @@ def calculate_dividend_metrics(holdings, price_data_map):
 
 def get_dividend_payout_schedule(symbol):
     """
-    [API 교체] yfinance 대신 Finnhub API를 사용하여 배당 정보를 조회합니다.
-    과거 배당금 지급 내역(지급일, 배당락일 포함)과 월 이름 목록을 함께 반환합니다.
+    [API 교체] Finnhub 대신 Polygon.io API를 사용하여 배당 정보를 조회합니다.
+    이 API는 지급일, 배당락일 등 상세 정보를 제공합니다.
     """
     upper_symbol = symbol.upper()
-    # 🛠️ 변경: 캐시 키를 Finnhub용으로 변경
-    cache_key = f"finnhub_dividend_schedule:{upper_symbol}"
+    # 🛠️ 변경: 캐시 키를 Polygon.io 용으로 변경
+    cache_key = f"polygon_dividend_schedule:{upper_symbol}"
     
     cached_data = get_from_redis_cache(cache_key)
     if cached_data: 
         return cached_data
 
-    if not FINNHUB_API_KEY:
-        logger.warning("Finnhub API 키가 없어 배당 정보를 조회할 수 없습니다.")
+    if not POLYGON_API_KEY:
+        logger.warning("Polygon.io API 키가 없어 배당 정보를 조회할 수 없습니다.")
         return {'payouts': [], 'months': []}
 
     payouts = []
     month_names = []
     
-    # 🛠️ 변경: API 호출 로직을 Finnhub으로 교체
     try:
-        # Finnhub API는 3년치 데이터를 제공하므로, 최근 데이터만 필터링할 필요가 거의 없음
-        one_year_ago = datetime.now() - timedelta(days=365*3)
-        start_date = one_year_ago.strftime('%Y-%m-%d')
-        
-        url = f"https://finnhub.io/api/v1/stock/dividend2?symbol={upper_symbol}&token={FINNHUB_API_KEY}"
+        # 🛠️ 변경: API 호출 로직을 Polygon.io로 교체
+        url = f"https://api.polygon.io/v3/reference/dividends?ticker={upper_symbol}&apiKey={POLYGON_API_KEY}"
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         
-        finnhub_dividends = response.json()
+        polygon_response = response.json()
+        polygon_dividends = polygon_response.get('results', [])
 
-        if finnhub_dividends:
-            for div in finnhub_dividends:
-                # 🛠️ 변경: Finnhub 응답 구조에 맞춰 데이터 파싱
-                if div.get('payDate') and div.get('amount'):
+        if polygon_dividends:
+            for div in polygon_dividends:
+                # 🛠️ 변경: Polygon.io 응답 구조에 맞춰 데이터 파싱
+                if div.get('pay_date') and div.get('cash_amount'):
                     payouts.append({
-                        'ex_date': div.get('exDate'),
-                        'pay_date': div.get('payDate'),
-                        'amount': div.get('amount'),
-                        'frequency': div.get('frequency')
+                        'ex_date': div.get('ex_dividend_date'),
+                        'pay_date': div.get('pay_date'),
+                        'amount': div.get('cash_amount')
                     })
 
-            # 월 이름 목록 계산 (지급일 기준)
-            payout_months_num = sorted(list(set(datetime.strptime(p['pay_date'], '%Y-%m-%d').month for p in payouts)))
+            # 월 이름 목록 계산 (정확한 지급일 기준)
+            payout_months_num = sorted(list(set(datetime.strptime(p['pay_date'], '%Y-%m-%d').month for p in payouts if p.get('pay_date'))))
             MONTH_MAP = {1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'}
             month_names = [MONTH_MAP[m] for m in payout_months_num]
 
     except requests.exceptions.RequestException as e:
-        logger.error(f"Finnhub API 호출 실패 ({upper_symbol}): {e}")
+        status_code = e.response.status_code if e.response else "N/A"
+        reason = e.response.reason if e.response else "N/A"
+        logger.error(f"Polygon.io API 호출 실패 ({upper_symbol}): {status_code} {reason}")
     except Exception as e:
-        logger.warning(f"({upper_symbol}) Finnhub 배당 지급 일정 조회 실패: {e}")
+        logger.warning(f"({upper_symbol}) Polygon.io 배당 지급 일정 조회 실패: {e}")
 
     result = {'payouts': payouts, 'months': month_names}
-    set_to_redis_cache(cache_key, result, ttl_hours=6) # 캐시 TTL 6시간으로 설정
+    set_to_redis_cache(cache_key, result, ttl_hours=6) # 6시간 캐싱으로 API 호출 최소화
     return result
 
 
