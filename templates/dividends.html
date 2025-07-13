@@ -67,7 +67,8 @@
         <div class="card">
             <div class="card-header">
                 <div class="d-flex justify-content-between align-items-center">
-                    <h5 class="card-title mb-0">월별 배당금 현황 (지급일 기준)</h5>
+                    {# 🛠️ UI 변경: 통일된 월별 배당금 뷰로 텍스트 수정 #}
+                    <h5 class="card-title mb-0">월별 배당금 현황</h5>
                     <div class="text-end">
                         <small class="text-muted d-block">연간 총 배당금</small>
                         <strong class="text-success fs-5">${{ "%.2f"|format(total_annual_dividend) }}</strong>
@@ -102,6 +103,10 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    // 툴팁 활성화
+    const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+
     Chart.register(ChartDataLabels);
 
     const allocationData = {{ allocation_data|tojson }};
@@ -130,55 +135,35 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- 2. 월별 배당금 막대 차트 ---
     if (monthlyCtx && monthlyData && monthlyData.datasets.length > 0) {
         
-        // 🛠️ 차트 개선: 스택(Stacked) 막대 차트로 변경하여 지급완료/예정 구분
+        // 🛠️ 차트 변경: 단순 막대그래프로 복귀
         const monthlyChart = new Chart(monthlyCtx, {
             type: 'bar', 
             data: { 
                 labels: monthlyData.labels, 
-                datasets: monthlyData.datasets.map(ds => ({
-                    ...ds,
+                datasets: [{
+                    label: '월별 배당금',
+                    data: monthlyData.datasets[0].data,
+                    backgroundColor: 'rgba(25, 135, 84, 0.6)',
+                    borderColor: 'rgba(25, 135, 84, 1)',
                     borderRadius: 4,
                     borderSkipped: false
-                }))
+                }]
             },
             options: { 
                 responsive: true, maintainAspectRatio: false,
                 layout: { padding: { top: 30 } },
                 plugins: { 
-                    legend: { display: true, position: 'bottom' },
-                    tooltip: { 
-                        mode: 'index',
-                        intersect: false,
-                        callbacks: { 
-                            label: (context) => {
-                                const label = context.dataset.label || '';
-                                const value = context.parsed.y;
-                                if (value > 0) {
-                                    return ` ${label}: $${value.toFixed(2)}`;
-                                }
-                                return null;
-                            }
-                        } 
-                    },
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: (context) => `총액: $${context.parsed.y.toFixed(2)}` } },
                     datalabels: {
-                        display: context => {
-                            // 스택의 가장 위에 있는 데이터셋에만 라벨 표시
-                            const datasets = context.chart.data.datasets;
-                            const datasetIndex = context.datasetIndex;
-                            const dataIndex = context.dataIndex;
-                            const isLastVisible = datasets.slice(datasetIndex + 1).every(ds => ds.data[dataIndex] === 0);
-                            return isLastVisible;
-                        },
-                        formatter: (value, context) => {
-                            const total = context.chart.data.datasets.reduce((sum, ds) => sum + ds.data[context.dataIndex], 0);
-                            return total > 0 ? '$' + total.toFixed(2) : null;
-                        },
-                        anchor: 'end', align: 'top', color: '#adb5bd', font: { weight: 'bold' }
+                        anchor: 'end', align: 'top',
+                        formatter: (value) => value > 0 ? '$' + value.toFixed(2) : null,
+                        color: '#adb5bd', font: { weight: 'bold' }
                     }
                 }, 
                 scales: { 
-                    x: { stacked: true, grid: { display: false } },
-                    y: { stacked: true, display: false, beginAtZero: true }
+                    x: { grid: { display: false } },
+                    y: { display: false, beginAtZero: true }
                 },
                 onClick: (event, elements) => {
                     if (elements.length > 0) {
@@ -216,10 +201,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 const logoUrl = item.profile?.logo_url || `https://via.placeholder.com/32/cccccc/FFFFFF?text=${item.symbol[0]}`;
                 const payDay = new Date(item.pay_date).getDate();
                 
-                // 🛠️ 기능 개선: '지급 완료'/'예정' 상태를 배지로 표시
-                const statusBadge = item.status === '지급 완료' 
-                    ? `<span class="badge rounded-pill bg-success-subtle text-success-emphasis">지급 완료</span>`
-                    : `<span class="badge rounded-pill bg-info-subtle text-info-emphasis">예정</span>`;
+                // 🛠️ 기능 개선: 추정치일 경우 정보 아이콘과 툴팁 추가
+                const estimatedIcon = item.is_estimated 
+                    ? `<span class="ms-2" data-bs-toggle="tooltip" data-bs-placement="top" title="과거 기록 기반 추정치">
+                         <i class="fas fa-info-circle text-muted"></i>
+                       </span>`
+                    : '';
 
                 const itemHtml = `
                 <div class="list-group-item d-flex p-2 bg-transparent">
@@ -231,13 +218,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     <div class="flex-grow-1">
                         <div class="d-flex justify-content-between">
                             <div>
-                                <strong class="mb-0">${item.symbol}</strong>
+                                <strong class="mb-0">${item.symbol}${estimatedIcon}</strong>
                                 <small class="company-name text-muted d-block">${item.profile?.name || ''}</small>
                             </div>
-                            <div class="text-end">
-                                <strong class="text-success fs-5 ms-3">$${item.amount.toFixed(2)}</strong>
-                                <div class="mt-1">${statusBadge}</div>
-                            </div>
+                            <strong class="text-success fs-5 ms-3">$${item.amount.toFixed(2)}</strong>
                         </div>
                         <div class="d-flex justify-content-between text-muted small mt-1">
                            <span>${item.quantity.toFixed(2)}주 @ $${item.dps_per_payout.toFixed(4)}</span>
@@ -247,6 +231,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 </div>`;
                 monthlyDetailContent.innerHTML += itemHtml;
             });
+
+            // 새로 추가된 툴팁들을 다시 활성화
+            const newTooltipTriggerList = monthlyDetailContent.querySelectorAll('[data-bs-toggle="tooltip"]');
+            [...newTooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
 
             monthlyDetailContainer.classList.remove('d-none');
             monthlyDetailContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
