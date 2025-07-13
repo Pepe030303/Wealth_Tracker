@@ -1,7 +1,9 @@
 {# 📄 templates/holdings.html #}
-{# 🛠️ UI/UX 개선: 보유 종목 리스트의 레이아웃을 전면 개편하고 로고를 표시합니다. #}
 
 {% extends "base.html" %}
+{# 🛠️ Refactoring: 매크로 파일 임포트 #}
+{% from 'macros.html' import render_stock_logo with context %}
+
 {% block title %}보유 종목 - Wealth Tracker{% endblock %}
 {% block content %}
 <div class="row">
@@ -21,34 +23,27 @@
                     <div class="row align-items-center g-3">
                         {# 좌측: 종목 로고, 심볼, 이름 #}
                         <div class="col-lg-3 d-flex align-items-center">
-                            {% if data.profile and data.profile.logo_url %}
-                                <img src="{{ data.profile.logo_url }}" class="stock-logo" alt="{{ data.holding.symbol }} logo"
-                                     onerror="this.onerror=null; this.src='https://via.placeholder.com/32/667eea/FFFFFF?text={{ data.holding.symbol[0] }}';">
-                            {% else %}
-                                <div class="stock-logo placeholder">
-                                    <span>{{ data.holding.symbol[0] }}</span>
-                                </div>
-                            {% endif %}
+                            {# 🛠️ Refactoring: 복잡한 if/else 블록을 매크로 호출로 변경 #}
+                            <div class="me-3">
+                                {{ render_stock_logo(data.profile, data.holding.symbol) }}
+                            </div>
                             <div>
                                 <h5 class="mb-0 fw-bold">{{ data.holding.symbol }}</h5>
                                 <span class="company-name">{{ data.profile.name if data.profile else 'N/A' }}</span>
                             </div>
                         </div>
 
-                        {# 우측: 재무 상세 정보 (간결한 레이아웃) #}
+                        {# 우측: 재무 상세 정보 #}
                         <div class="col-lg-9">
                             <div class="row text-center text-lg-start">
-                                <!-- 1. 현재가 / 평단가 -->
                                 <div class="col-md-4 col-sm-6 mb-2 mb-md-0">
                                     <small class="text-muted d-block">현재가 / 평단가</small>
                                     <strong>${{ "%.2f"|format(data.current_price) }}</strong> / <span class="text-muted">${{ "%.2f"|format(data.holding.purchase_price) }}</span>
                                 </div>
-                                <!-- 2. 평가금액 / 투자금액 -->
                                 <div class="col-md-4 col-sm-6 mb-2 mb-md-0">
                                     <small class="text-muted d-block">평가금액 / 투자금액</small>
                                     <strong>${{ "%.2f"|format(data.current_value) }}</strong> / <span class="text-muted">${{ "%.2f"|format(data.total_cost) }}</span>
                                 </div>
-                                <!-- 3. 손익 (수익률) -->
                                 <div class="col-md-4 col-sm-12">
                                      <small class="text-muted d-block">손익 (수익률)</small>
                                      <strong class="{% if data.profit_loss >= 0 %}text-success{% else %}text-danger{% endif %}">
