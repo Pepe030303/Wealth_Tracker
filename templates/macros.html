@@ -1,0 +1,21 @@
+{# 📄 templates/macros.html #}
+{# 🛠️ Refactoring: 재사용 가능한 매크로를 정의하는 파일 #}
+
+{# 
+  종목 프로필 로고를 렌더링하는 매크로.
+  - profile: 로고 URL을 포함한 종목 프로필 객체
+  - symbol: 종목 심볼 (Fallback 시 사용)
+#}
+{% macro render_stock_logo(profile, symbol) %}
+  {% if profile and profile.logo_url %}
+    <img src="{{ profile.logo_url }}" 
+         class="stock-logo" 
+         alt="{{ symbol }} logo"
+         loading="lazy"
+         onerror="this.onerror=null; this.src='https://via.placeholder.com/32/cccccc/FFFFFF?text={{ symbol[0] }}';">
+  {% else %}
+    <div class="stock-logo placeholder">
+        <span>{{ symbol[0] }}</span>
+    </div>
+  {% endif %}
+{% endmacro %}
