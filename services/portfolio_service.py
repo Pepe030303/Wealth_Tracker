@@ -1,6 +1,8 @@
 # 📄 services/portfolio_service.py
 
 from stock_api import stock_api
+# 🛠️ 버그 수정: NameError 해결을 위해 defaultdict를 collections 모듈에서 import 합니다.
+from collections import defaultdict
 from utils import calculate_dividend_metrics, get_projected_dividend_schedule
 from app import db
 from models import Holding, Dividend
@@ -100,7 +102,6 @@ def get_portfolio_analysis_data(user_id):
     
     dividend_metrics = calculate_dividend_metrics(holdings, price_data_map)
     for symbol, metrics in dividend_metrics.items():
-        # 🛠️ 변경: 예측 기반의 월 목록을 사용
         schedule_data = get_projected_dividend_schedule(symbol)
         metrics['payout_months'] = schedule_data.get('months', [])
         metrics['profile'] = profile_data_map.get(symbol, {})
@@ -125,7 +126,6 @@ def get_portfolio_analysis_data(user_id):
     total_profit_loss = total_current_value - total_investment
     summary_data = {'total_investment': total_investment, 'total_current_value': total_current_value, 'total_profit_loss': total_profit_loss, 'total_return_percent': (total_profit_loss / total_investment * 100) if total_investment > 0 else 0}
     
-    # 🛠️ 변경: 새로운 통합 배당 데이터 함수 호출
     monthly_dividend_data = get_unified_monthly_dividends(user_id, holdings)
     
     return {
