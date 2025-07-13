@@ -13,8 +13,8 @@ from rq import Queue
 
 logging.basicConfig(level=logging.INFO)
 
-# 🛠️ 기능 추가: 프로젝트 버전 관리
-APP_VERSION = "v1.2.0" 
+# 🛠️ 버전 업데이트
+APP_VERSION = "v1.2.1" 
 
 class Base(DeclarativeBase): pass
 db = SQLAlchemy(model_class=Base)
