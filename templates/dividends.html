@@ -1,59 +1,99 @@
 {# 📄 templates/dividends.html #}
+{# 🛠️ UI/UX 개선: 배당금 페이지의 레이아웃과 데이터 표현 방식을 전면 개편합니다. #}
 
 {% extends "base.html" %}
-{% block title %}예상 배당금 - Wealth Tracker{% endblock %}
+{% block title %}배당금 분석 - Wealth Tracker{% endblock %}
 
 {% block content %}
 <div class="row">
-    <div class="col-12"><h1 class="mb-4"><i class="fas fa-coins me-2"></i>예상 배당금</h1></div>
+    <div class="col-12"><h1 class="mb-4"><i class="fas fa-coins me-2"></i>배당금 분석</h1></div>
 </div>
+
+{% if dividend_metrics %}
 <div class="row">
-    <div class="col-lg-7 mb-4">
+    <!-- 좌측: 종목별 배당금 리스트 -->
+    <div class="col-lg-6 mb-4">
         <div class="card h-100">
-            <div class="card-header"><h5 class="card-title mb-0">종목별 예상 배당금</h5></div>
+            <div class="card-header"><h5 class="card-title mb-0">종목별 연간 배당금</h5></div>
             <div class="card-body p-0">
-                {% if dividend_metrics %}
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead><tr><th>종목</th><th>배당 월</th><th class="text-end">연간 예상액</th><th class="text-end">수익률</th></tr></thead>
-                            <tbody>
-                                {% for symbol, metrics in dividend_metrics.items() %}
-                                <tr>
-                                    <td><strong class="fs-5">{{ symbol }}</strong></td>
-                                    <td>
+                <div class="list-group list-group-flush">
+                    {% for symbol, metrics in dividend_metrics.items() %}
+                    <div class="list-group-item p-3">
+                        <div class="d-flex align-items-center">
+                            {% if metrics.profile and metrics.profile.logo_url %}
+                                <img src="{{ metrics.profile.logo_url }}" class="stock-logo me-3" alt="{{ symbol }} logo"
+                                     onerror="this.onerror=null; this.src='https://via.placeholder.com/32/667eea/FFFFFF?text={{ symbol[0] }}';">
+                            {% else %}
+                                <div class="stock-logo placeholder me-3"><span>{{ symbol[0] }}</span></div>
+                            {% endif %}
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between">
+                                    <h5 class="mb-0 fw-bold">{{ symbol }}</h5>
+                                    <small class="text-muted">{{ metrics.quantity|round(2) }}주 @ ${{ "%.4f"|format(metrics.dividend_per_share) }}/주</small>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-end">
+                                    <div>
                                         {% set months_in_korean = metrics.payout_months | korean_dividend_months %}
                                         {% for month in months_in_korean %}
-                                            <span class="badge bg-secondary me-1">{{ month }}</span>
+                                            <span class="badge bg-secondary-subtle text-secondary-emphasis me-1">{{ month }}</span>
                                         {% endfor %}
-                                    </td>
-                                    <td class="text-end">${{ "%.2f"|format(metrics.expected_annual_dividend) }}</td>
-                                    <td class="text-end text-success fw-bold">{{ "%.2f"|format(metrics.dividend_yield) }}%</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                                    </div>
+                                    <strong class="text-success fs-5">${{ "%.2f"|format(metrics.expected_annual_dividend) }}</strong>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                {% else %}<div class="text-center py-5"><p class="text-muted">배당 정보가 없습니다. 배당 정보를 가져오려면 거래 기록을 추가해주세요.</p></div>{% endif %}
+                    {% endfor %}
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-lg-5 mb-4">
+    <!-- 우측: 배당 비중 도넛 차트 -->
+    <div class="col-lg-6 mb-4">
         <div class="card h-100">
-            <div class="card-header"><h5 class="card-title mb-0">연간 예상 배당금 비중</h5></div>
-            <div class="card-body d-flex align-items-center justify-content-center">
+            <div class="card-header"><h5 class="card-title mb-0">연간 배당금 비중</h5></div>
+            <div class="card-body d-flex align-items-center justify-content-center p-2">
                 {% if allocation_data %}<canvas id="dividendAllocationChart"></canvas>{% else %}<p class="text-muted">데이터가 없습니다.</p>{% endif %}
             </div>
         </div>
     </div>
 </div>
+
+<!-- 하단: 월별 배당금 차트 및 상세 정보 -->
 <div class="row">
     <div class="col-12">
         <div class="card">
-            <div class="card-header"><h5 class="card-title mb-0">월별 예상 배당금</h5></div>
-            <div class="card-body"><canvas id="monthlyDividendChart" style="height: 300px;"></canvas></div>
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">월별 배당금 현황</h5>
+                    <div class="text-end">
+                        <small class="text-muted d-block">연간 총 배당금</small>
+                        <strong class="text-success fs-5">${{ "%.2f"|format(total_annual_dividend) }}</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 250px;">
+                    <canvas id="monthlyDividendChart"></canvas>
+                </div>
+            </div>
+            <!-- 월별 상세 정보 (클릭 시 표시) -->
+            <div id="monthlyDetail" class="d-none card-footer bg-light-subtle">
+                 <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 id="monthlyDetailTitle" class="mb-0"></h5>
+                    <button type="button" class="btn-close" id="closeMonthlyDetail" aria-label="Close"></button>
+                </div>
+                <div id="monthlyDetailContent" class="list-group"></div>
+            </div>
         </div>
     </div>
 </div>
+{% else %}
+<div class="text-center py-5">
+    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+    <p class="text-muted">배당 정보가 없습니다. 배당 정보를 가져오려면 거래 기록을 추가해주세요.</p>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -67,100 +107,115 @@ document.addEventListener('DOMContentLoaded', function () {
     const monthlyData = {{ monthly_dividend_data|tojson }};
     const monthlyCtx = document.getElementById('monthlyDividendChart')?.getContext('2d');
 
+    // --- 1. 배당 비중 도넛 차트 ---
     if (allocationCtx && allocationData && allocationData.length > 0) {
-        // ... (배당 비중 파이 차트 로직은 변경 없음) ...
         const totalDividend = allocationData.reduce((sum, item) => sum + item.value, 0);
         new Chart(allocationCtx, {
-            type: 'pie', 
+            type: 'doughnut', // 🛠️ 원형 -> 도넛 차트로 변경
             data: { labels: allocationData.map(i => i.symbol), datasets: [{ data: allocationData.map(i => i.value), backgroundColor: ['#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2'], borderColor: '#343a40' }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' }, tooltip: { callbacks: { label: function(context) { const label = context.label || ''; const value = context.parsed; const percentage = (value / totalDividend * 100).toFixed(2); return ` ${label}: $${value.toFixed(2)} (${percentage}%)`; } } } } }
         });
     }
 
+    // --- 2. 월별 배당금 막대 차트 ---
     if (monthlyCtx && monthlyData && monthlyData.datasets.length > 0) {
-        // [차트 개선] 월별 배당금 차트 로직 전면 수정
-        new Chart(monthlyCtx, {
+        // 🛠️ 차트 데이터를 월별 총합으로 단순화
+        const monthlyTotals = monthlyData.datasets.reduce((acc, dataset) => {
+            dataset.data.forEach((value, i) => {
+                acc[i] = (acc[i] || 0) + value;
+            });
+            return acc;
+        }, []);
+        
+        const monthlyChart = new Chart(monthlyCtx, {
             type: 'bar', 
             data: { 
                 labels: monthlyData.labels, 
-                datasets: monthlyData.datasets
+                datasets: [{
+                    label: '월별 배당금',
+                    data: monthlyTotals,
+                    backgroundColor: 'rgba(25, 135, 84, 0.6)',
+                    borderColor: 'rgba(25, 135, 84, 1)',
+                    borderWidth: 1,
+                    borderRadius: 8, // 🛠️ 둥근 막대 그래프
+                    borderSkipped: false,
+                }]
             },
             options: { 
-                responsive: true, 
-                maintainAspectRatio: false,
-                // 개선: 라벨이 잘리지 않도록 상단에 여백 추가
-                layout: {
-                    padding: {
-                        top: 30
-                    }
-                },
+                responsive: true, maintainAspectRatio: false,
                 plugins: { 
-                    legend: { display: true, position: 'bottom' },
-                    // 개선: 데이터 라벨(총액) 설정
-                    datalabels: {
-                        // 각 스택 그룹의 최상단에만 총액을 표시하기 위한 로직
-                        display: context => {
-                            const dataset = context.chart.data.datasets[context.datasetIndex];
-                            const value = dataset.data[context.dataIndex];
-                            // 마지막 데이터셋의 0이 아닌 값에만 라벨 표시
-                            return context.datasetIndex === context.chart.data.datasets.length - 1 && value > 0;
-                        },
-                        // 스택의 총합을 계산하여 표시
-                        formatter: (value, context) => {
-                            const datasets = context.chart.data.datasets;
-                            let total = 0;
-                            datasets.forEach(dataset => {
-                                total += dataset.data[context.dataIndex];
-                            });
-                            return total > 0 ? '$' + total.toFixed(2) : null;
-                        },
-                        anchor: 'end',
-                        align: 'top',
-                        color: '#adb5bd',
-                        font: { weight: 'bold' }
-                    },
-                    // 개선: 상세 툴팁 설정
+                    legend: { display: false },
                     tooltip: {
-                        mode: 'index',
-                        intersect: false,
                         callbacks: {
-                            // 툴팁 제목: '2025년 12월'
-                            title: function(tooltipItems) {
-                                return `2025년 ${tooltipItems[0].label}`;
-                            },
-                            // 툴팁 본문: 종목명, 금액, 비중
-                            label: function(context) {
-                                const label = context.dataset.label || '';
-                                const value = context.parsed.y;
-                                if (value === 0) return null; // 0인 항목은 툴팁에서 제외
-
-                                const total = context.chart.data.datasets.reduce((sum, ds) => sum + ds.data[context.dataIndex], 0);
-                                const percentage = total > 0 ? (value / total * 100).toFixed(1) : 0;
-                                
-                                return `${label}: $${value.toFixed(2)} (${percentage}%)`;
-                            },
-                            // 툴팁 하단: '총액'
-                            footer: function(tooltipItems) {
-                                let total = 0;
-                                tooltipItems.forEach(item => {
-                                    total += item.parsed.y;
-                                });
-                                return '총액: $' + total.toFixed(2);
-                            }
+                            label: (context) => `총액: $${context.parsed.y.toFixed(2)}`
                         }
+                    },
+                    datalabels: {
+                        anchor: 'end', align: 'top',
+                        formatter: (value) => value > 0 ? '$' + value.toFixed(2) : null,
+                        color: '#adb5bd', font: { weight: 'bold' }
                     }
                 }, 
                 scales: { 
-                    x: { stacked: true }, // x축 스택 활성화
-                    y: { 
-                        stacked: true, // y축 스택 활성화
-                        beginAtZero: true, 
-                        ticks: { callback: (v) => '$' + v.toFixed(0) } 
-                    } 
-                } 
+                    x: { grid: { display: false } },
+                    y: { display: false, beginAtZero: true } // 🛠️ Y축 제거
+                },
+                // 🛠️ 클릭 이벤트 핸들러 추가
+                onClick: (event, elements) => {
+                    if (elements.length > 0) {
+                        const index = elements[0].index;
+                        renderMonthlyDetails(index);
+                    }
+                }
             }
+        });
+
+        // --- 3. 월별 상세 정보 렌더링 함수 ---
+        const monthlyDetailContainer = document.getElementById('monthlyDetail');
+        const monthlyDetailTitle = document.getElementById('monthlyDetailTitle');
+        const monthlyDetailContent = document.getElementById('monthlyDetailContent');
+        const closeButton = document.getElementById('closeMonthlyDetail');
+        const detailedData = monthlyData.detailed_data;
+        
+        function renderMonthlyDetails(index) {
+            const monthName = monthlyData.labels[index];
+            const dataForMonth = detailedData[index] || [];
+            
+            if (dataForMonth.length === 0) {
+                monthlyDetailContainer.classList.add('d-none');
+                return;
+            }
+            
+            const totalForMonth = dataForMonth.reduce((sum, item) => sum + item.amount, 0);
+            
+            monthlyDetailTitle.innerHTML = `${monthName} 배당 상세 <span class="text-success fw-bold ms-3">$${totalForMonth.toFixed(2)}</span>`;
+            monthlyDetailContent.innerHTML = '';
+            
+            dataForMonth.forEach(item => {
+                const logoUrl = item.profile?.logo_url || `https://via.placeholder.com/32/667eea/FFFFFF?text=${item.symbol[0]}`;
+                const companyName = item.profile?.name || 'N/A';
+
+                const itemHtml = `
+                <div class="list-group-item d-flex align-items-center p-2">
+                    <img src="${logoUrl}" class="stock-logo me-3" alt="${item.symbol} logo" onerror="this.onerror=null; this.src='https...';">
+                    <div class="flex-grow-1">
+                        <strong class="mb-0">${item.symbol}</strong>
+                        <div class="company-name">${companyName}</div>
+                    </div>
+                    <strong class="text-success fs-5">$${item.amount.toFixed(2)}</strong>
+                </div>`;
+                monthlyDetailContent.innerHTML += itemHtml;
+            });
+
+            monthlyDetailContainer.classList.remove('d-none');
+            // UX 개선: 상세 뷰로 스크롤
+            monthlyDetailContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        closeButton.addEventListener('click', () => {
+             monthlyDetailContainer.classList.add('d-none');
         });
     }
 });
 </script>
-{% endblock %}```
+{% endblock %}
