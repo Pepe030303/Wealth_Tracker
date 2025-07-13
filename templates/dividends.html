@@ -1,6 +1,9 @@
 {# 📄 templates/dividends.html #}
 
 {% extends "base.html" %}
+{# 🛠️ Refactoring: 매크로 파일 임포트 #}
+{% from 'macros.html' import render_stock_logo with context %}
+
 {% block title %}배당금 분석 - Wealth Tracker{% endblock %}
 
 {% block content %}
@@ -19,16 +22,10 @@
                     {% for symbol, metrics in dividend_metrics %}
                     <div class="list-group-item p-3">
                         <div class="d-flex align-items-center">
-                            {# 🛠️ 개선: 프로필 이미지 표시, lazy loading, onerror fallback 적용 #}
-                            {% if metrics.profile and metrics.profile.logo_url %}
-                                <img src="{{ metrics.profile.logo_url }}" 
-                                     class="stock-logo me-3" 
-                                     alt="{{ symbol }} logo"
-                                     loading="lazy"
-                                     onerror="this.onerror=null; this.src='https://via.placeholder.com/32/cccccc/FFFFFF?text={{ symbol[0] }}';">
-                            {% else %}
-                                <div class="stock-logo placeholder me-3"><span>{{ symbol[0] }}</span></div>
-                            {% endif %}
+                            {# 🛠️ Refactoring: 복잡한 if/else 블록을 매크로 호출로 변경 #}
+                            <div class="me-3">
+                                {{ render_stock_logo(metrics.profile, symbol) }}
+                            </div>
                             <div class="flex-grow-1">
                                 <div class="d-flex justify-content-between">
                                     <h5 class="mb-0 fw-bold">{{ symbol }}</h5>
