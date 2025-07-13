@@ -36,7 +36,7 @@
 | **프론트엔드**   | `Jinja2`, `HTML5`, `Bootstrap 5`, `Chart.js`, `Vanilla JavaScript`                                  |
 | **데이터베이스** | `PostgreSQL` (프로덕션), `SQLite` (개발)                                                            |
 | **캐싱 & 메시지 큐** | `Redis` (API 응답 캐싱 및 성능 개선), `RQ` (백그라운드 작업 처리)                                   |
-| **데이터 소스**  | `Yahoo Finance` (`yfinance` 패키지), `SEC` (미국 증권거래위원회)                                      |
+| **데이터 소스**  | `Yahoo Finance` (`yfinance` 패키지, **벌크 API 호출**), `SEC` (미국 증권거래위원회)                                      |
 | **배포/실행 환경** | `Gunicorn` (WSGI 서버), `Render.com`                                                                |
 
 ## 🚀 설치 및 실행 방법

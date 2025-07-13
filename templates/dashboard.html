@@ -133,6 +133,29 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (dividendCtx && monthlyData && monthlyData.datasets.length > 0) {
+
+        const monthlyTotals = monthlyData.datasets.reduce((acc, dataset) => {
+            dataset.data.forEach((value, i) => { acc[i] = (acc[i] || 0) + value; });
+            return acc;
+        }, []);
+
+        new Chart(dividendCtx, {
+            type: 'bar',
+            data: { 
+                labels: monthlyData.labels, 
+                datasets: [{
+                    label: '월별 배당금',
+                    data: monthlyTotals,
+                    backgroundColor: 'rgba(25, 135, 84, 0.6)',
+                    borderColor: 'rgba(25, 135, 84, 1)',
+                    borderWidth: 1,
+                    borderRadius: 8,
+                    borderSkipped: false,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+
         // 🛠️ UI 개선: 대시보드 차트 스타일을 배당금 페이지와 통일
         new Chart(dividendCtx, {
             type: 'bar',
@@ -140,6 +163,7 @@ document.addEventListener('DOMContentLoaded', function () {
             options: {
                 responsive: true, maintainAspectRatio: false,
                 // 🛠️ 버그 수정: 라벨이 잘리지 않도록 상단에 여백 추가
+
                 layout: { padding: { top: 30 } },
                 plugins: {
                     legend: { display: true, position: 'bottom' },
@@ -162,11 +186,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                 },
                 scales: { 
+
+                    x: { grid: { display: false } },
+                    y: { display: false, beginAtZero: true }
+                }
+
                     x: { stacked: true, grid: { display: false } },
                     // 🛠️ UI 개선: Y축 제거
                     y: { stacked: true, display: false, beginAtZero: true } 
                 },
                 // 🛠️ UI 개선: 대시보드에서는 클릭 이벤트 없음
+
             }
         });
     }

@@ -5,60 +5,44 @@ from utils import calculate_dividend_metrics, get_dividend_months
 from models import Holding
 
 def get_monthly_dividend_distribution(dividend_metrics):
-    """
-    [차트 개선] 월별 배당금을 종목별 스택 및 상세 데이터 형태로 계산.
-    - Chart.js의 막대 차트에서 사용할 데이터셋 구조와
-    - 월 클릭 시 상세 내역을 보여주기 위한 상세 데이터를 함께 반환.
-    """
+    # ... (기존과 동일)
     month_map = {'Jan':0, 'Feb':1, 'Mar':2, 'Apr':3, 'May':4, 'Jun':5, 'Jul':6, 'Aug':7, 'Sep':8, 'Oct':9, 'Nov':10, 'Dec':11}
-    
     detailed_monthly_data = {i: [] for i in range(12)}
     monthly_data_by_symbol = {}
-
     for symbol, metrics in dividend_metrics.items():
-        if symbol not in monthly_data_by_symbol:
-            monthly_data_by_symbol[symbol] = [0] * 12
-
+        if symbol not in monthly_data_by_symbol: monthly_data_by_symbol[symbol] = [0] * 12
         dividend_info = get_dividend_months(symbol)
         payout_months = dividend_info.get("months", [])
         payout_count = dividend_info.get("count", 0)
-
         if payout_months and payout_count > 0 and metrics.get('expected_annual_dividend'):
             amount_per_payout = metrics['expected_annual_dividend'] / payout_count
+
             
             # 🛠️ 개선: 1회 지급 시 주당 배당금 계산
-            dps_per_payout = (metrics.get('dividend_per_share', 0) / payout_count) if payout_count > 0 else 0
 
+            dps_per_payout = (metrics.get('dividend_per_share', 0) / payout_count) if payout_count > 0 else 0
             for month_str in payout_months:
                 if month_str in month_map:
                     month_index = month_map[month_str]
                     monthly_data_by_symbol[symbol][month_index] += amount_per_payout
                     # 🛠️ 개선: 상세 데이터에 수량 및 주당 배당금 정보 추가
                     detailed_monthly_data[month_index].append({
-                        'symbol': symbol,
-                        'amount': amount_per_payout,
+                        'symbol': symbol, 'amount': amount_per_payout,
                         'profile': metrics.get('profile', {}),
                         'quantity': metrics.get('quantity', 0),
                         'dps_per_payout': dps_per_payout
                     })
 
+
     # Chart.js가 요구하는 datasets 형식으로 변환 (스택 차트용 - 대시보드에서 사용)
+
     datasets = []
     colors = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2']
     color_index = 0
     for symbol, data in monthly_data_by_symbol.items():
-        datasets.append({
-            'label': symbol,
-            'data': [round(d, 2) for d in data],
-            'backgroundColor': colors[color_index % len(colors)],
-        })
+        datasets.append({'label': symbol, 'data': [round(d, 2) for d in data], 'backgroundColor': colors[color_index % len(colors)]})
         color_index += 1
-
-    return {
-        'labels': [f"{i+1}월" for i in range(12)],
-        'datasets': datasets,
-        'detailed_data': detailed_monthly_data
-    }
+    return {'labels': [f"{i+1}월" for i in range(12)], 'datasets': datasets, 'detailed_data': detailed_monthly_data}
 
 
 def get_portfolio_analysis_data(user_id):
@@ -69,12 +53,25 @@ def get_portfolio_analysis_data(user_id):
     if not holdings:
         return None
 
-    symbols = {h.symbol for h in holdings}
-    price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
-    profile_data_map = {s: stock_api.get_stock_profile(s) for s in symbols}
+    symbols = list({h.symbol for h in holdings})
+    # 🛠️ 개선: 개별 호출 대신 벌크 API 호출 사용
+    price_data_map = stock_api.get_stock_prices_bulk(symbols)
+    profile_data_map = stock_api.get_stock_profiles_bulk(symbols)
     
     dividend_metrics = calculate_dividend_metrics(holdings, price_data_map)
     for symbol, metrics in dividend_metrics.items():
+
+        h = next((h for h in holdings if h.symbol == symbol), None)
+        current_price = price_data_map.get(symbol, {}).get('price') or (h.purchase_price if h else 0)
+        quantity = h.quantity if h else 0
+        current_value = current_price * quantity
+        
+        dividend_info = get_dividend_months(symbol)
+        metrics['payout_months'] = dividend_info.get("months", [])
+        metrics['profile'] = profile_data_map.get(symbol, {})
+        metrics['quantity'] = quantity
+        metrics['current_value'] = current_value
+
         dividend_info = get_dividend_months(symbol)
         metrics['payout_months'] = dividend_info.get("months", [])
         metrics['profile'] = profile_data_map.get(symbol, {})
