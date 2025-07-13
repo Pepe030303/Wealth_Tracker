@@ -67,14 +67,16 @@ def dividends():
     if not portfolio_data:
         return render_template('dividends.html', dividend_metrics={}, allocation_data=[], monthly_dividend_data={})
     
-    # 🛠️ 템플릿에 전달할 데이터 구조를 명확하게 분리
     dividend_metrics = portfolio_data['dividend_metrics']
+    # 🛠️ 개선: 평가금액(current_value) 기준 내림차순 정렬
+    sorted_dividend_metrics = sorted(dividend_metrics.items(), key=lambda item: item[1].get('current_value', 0), reverse=True)
+    
     allocation_data = get_dividend_allocation_data(dividend_metrics)
     monthly_dividend_data = portfolio_data['monthly_dividend_data']
     total_annual_dividend = sum(m.get('expected_annual_dividend', 0) for m in dividend_metrics.values())
 
     return render_template('dividends.html',
-                           dividend_metrics=dividend_metrics,
+                           dividend_metrics=sorted_dividend_metrics, # 정렬된 데이터 전달
                            allocation_data=allocation_data,
                            monthly_dividend_data=monthly_dividend_data,
                            total_annual_dividend=total_annual_dividend)
@@ -108,6 +110,10 @@ def holdings():
             'profit_loss': profit_loss,
             'profit_loss_percent': profit_loss_percent,
         })
+
+    # 🛠️ 개선: 평가금액(current_value) 기준 내림차순 정렬
+    holdings_data.sort(key=lambda x: x['current_value'], reverse=True)
+    
     return render_template('holdings.html', holdings_data=holdings_data)
 
 # ... (trades, etc. routes are unchanged) ...
