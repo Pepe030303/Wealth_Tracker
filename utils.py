@@ -80,10 +80,9 @@ def calculate_dividend_metrics(holdings, price_data_map):
             
     return dividend_metrics
 
-# 🛠️ 개선: 함수명을 더 명확하게 변경하고, 상세 배당일과 주당 금액을 반환하도록 개선
 def get_dividend_payout_schedule(symbol):
     """
-    과거 1년간의 배당금 지급 내역(배당락일, 주당 배당금)을 조회.
+    과거 1년간의 배당금 지급 내역과 월 이름 목록을 함께 반환.
     """
     upper_symbol = symbol.upper()
     cache_key = f"dividend_payout_schedule:{upper_symbol}"
@@ -93,6 +92,7 @@ def get_dividend_payout_schedule(symbol):
         return cached_data
 
     payouts = []
+    month_names = []
     try:
         ticker = yf.Ticker(upper_symbol)
         actions = ticker.actions
@@ -100,7 +100,6 @@ def get_dividend_payout_schedule(symbol):
             dividends_data = actions[actions['Dividends'] > 0]
             if not dividends_data.empty:
                 one_year_ago = datetime.now() - timedelta(days=365)
-                # 타임존 정보가 있을 경우 제거
                 if dividends_data.index.tz is not None:
                     dividends_data.index = dividends_data.index.tz_convert(None)
                 
@@ -110,11 +109,19 @@ def get_dividend_payout_schedule(symbol):
                         'date': ex_date.strftime('%Y-%m-%d'),
                         'amount': row['Dividends']
                     })
+
+                # 🛠️ Refactoring: 월 이름 목록 계산 로직을 이 함수로 이전
+                payout_months_num = sorted(list(set(datetime.strptime(p['date'], '%Y-%m-%d').month for p in payouts)))
+                MONTH_MAP = {1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'}
+                month_names = [MONTH_MAP[m] for m in payout_months_num]
+
     except Exception as e:
         logger.warning(f"({upper_symbol}) 배당 지급 일정 조회 실패: {e}")
 
-    set_to_redis_cache(cache_key, payouts)
-    return payouts
+    # 🛠️ Refactoring: 반환 값 구조를 딕셔너리로 변경
+    result = {'payouts': payouts, 'months': month_names}
+    set_to_redis_cache(cache_key, result)
+    return result
 
 def get_dividend_allocation_data(dividend_metrics):
     return [{'symbol': s, 'value': m['expected_annual_dividend']} for s, m in dividend_metrics.items() if m.get('expected_annual_dividend', 0) > 0]
