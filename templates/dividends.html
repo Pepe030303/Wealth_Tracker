@@ -1,4 +1,5 @@
 {# 📄 templates/dividends.html #}
+{# 🛠️ UI/UX 개선: 배당금 페이지의 레이아웃과 데이터 표현 방식을 전면 개편합니다. #}
 
 {% extends "base.html" %}
 {% block title %}배당금 분석 - Wealth Tracker{% endblock %}
@@ -16,13 +17,12 @@
             <div class="card-header"><h5 class="card-title mb-0">종목별 연간 배당금</h5></div>
             <div class="card-body p-0">
                 <div class="list-group list-group-flush">
-                    {% for symbol, metrics in dividend_metrics %} {# 🛠️ 정렬된 리스트를 순회 #}
+                    {% for symbol, metrics in dividend_metrics.items() %}
                     <div class="list-group-item p-3">
                         <div class="d-flex align-items-center">
                             {% if metrics.profile and metrics.profile.logo_url %}
-                                {# 🛠️ Fixed: API 실패 시 기본 플레이스홀더 이미지 표시 #}
                                 <img src="{{ metrics.profile.logo_url }}" class="stock-logo me-3" alt="{{ symbol }} logo"
-                                     onerror="this.onerror=null; this.src='https://via.placeholder.com/32/cccccc/FFFFFF?text={{ symbol[0] }}';">
+                                     onerror="this.onerror=null; this.src='https://via.placeholder.com/32/667eea/FFFFFF?text={{ symbol[0] }}';">
                             {% else %}
                                 <div class="stock-logo placeholder me-3"><span>{{ symbol[0] }}</span></div>
                             {% endif %}
@@ -107,15 +107,18 @@ document.addEventListener('DOMContentLoaded', function () {
     const monthlyData = {{ monthly_dividend_data|tojson }};
     const monthlyCtx = document.getElementById('monthlyDividendChart')?.getContext('2d');
 
+    // --- 1. 배당 비중 도넛 차트 ---
     if (allocationCtx && allocationData && allocationData.length > 0) {
         const totalDividend = allocationData.reduce((sum, item) => sum + item.value, 0);
         new Chart(allocationCtx, {
             type: 'doughnut',
             data: { labels: allocationData.map(i => i.symbol), datasets: [{ data: allocationData.map(i => i.value), backgroundColor: ['#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2'], borderColor: '#343a40' }] },
             options: { 
-                responsive: true, maintainAspectRatio: false, 
+                responsive: true, 
+                maintainAspectRatio: false, 
                 plugins: { 
                     legend: { position: 'right' }, 
+                    // 🛠️ 개선: 툴팁에만 정보 표시하고, 차트 위 텍스트는 제거
                     datalabels: { display: false },
                     tooltip: { callbacks: { label: function(context) { const label = context.label || ''; const value = context.parsed; const percentage = (value / totalDividend * 100).toFixed(2); return ` ${label}: $${value.toFixed(2)} (${percentage}%)`; } } } 
                 } 
@@ -123,6 +126,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // --- 2. 월별 배당금 막대 차트 ---
     if (monthlyCtx && monthlyData && monthlyData.datasets.length > 0) {
         const monthlyTotals = monthlyData.datasets.reduce((acc, dataset) => {
             dataset.data.forEach((value, i) => { acc[i] = (acc[i] || 0) + value; });
@@ -141,6 +145,7 @@ document.addEventListener('DOMContentLoaded', function () {
             },
             options: { 
                 responsive: true, maintainAspectRatio: false,
+                // 🛠️ 버그 수정: 라벨이 잘리지 않도록 상단에 여백 추가
                 layout: { padding: { top: 30 } },
                 plugins: { 
                     legend: { display: false },
@@ -164,6 +169,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
+        // --- 3. 월별 상세 정보 렌더링 함수 ---
         const monthlyDetailContainer = document.getElementById('monthlyDetail');
         const monthlyDetailTitle = document.getElementById('monthlyDetailTitle');
         const monthlyDetailContent = document.getElementById('monthlyDetailContent');
@@ -185,10 +191,11 @@ document.addEventListener('DOMContentLoaded', function () {
             monthlyDetailContent.innerHTML = '';
             
             dataForMonth.forEach(item => {
-                const logoUrl = item.profile?.logo_url || `https://via.placeholder.com/32/cccccc/FFFFFF?text=${item.symbol[0]}`;
+                const logoUrl = item.profile?.logo_url || `https://via.placeholder.com/32/667eea/FFFFFF?text=${item.symbol[0]}`;
+                // 🛠️ 개선: 상세 정보에 수량 및 주당 배당금 추가
                 const itemHtml = `
                 <div class="list-group-item d-flex align-items-center p-2 bg-transparent">
-                    <img src="${logoUrl}" class="stock-logo me-3" alt="${item.symbol} logo" onerror="this.onerror=null; this.src='https://via.placeholder.com/32/cccccc/FFFFFF?text=${item.symbol[0]}';">
+                    <img src="${logoUrl}" class="stock-logo me-3" alt="${item.symbol} logo" onerror="this.onerror=null; this.src='https://via.placeholder.com/32/667eea/FFFFFF?text=${item.symbol[0]}';">
                     <div class="flex-grow-1">
                         <div class="d-flex justify-content-between">
                             <strong class="mb-0">${item.symbol}</strong>
