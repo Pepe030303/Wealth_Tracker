@@ -67,7 +67,6 @@
         <div class="card">
             <div class="card-header">
                 <div class="d-flex justify-content-between align-items-center">
-                    {# 🛠️ UI 변경: 통일된 월별 배당금 뷰로 텍스트 수정 #}
                     <h5 class="card-title mb-0">월별 배당금 현황</h5>
                     <div class="text-end">
                         <small class="text-muted d-block">연간 총 배당금</small>
@@ -103,7 +102,6 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    // 툴팁 활성화
     const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
     const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
 
@@ -112,8 +110,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const allocationData = {{ allocation_data|tojson }};
     const allocationCtx = document.getElementById('dividendAllocationChart')?.getContext('2d');
     const monthlyData = {{ monthly_dividend_data|tojson }};
-    const monthlyCtx = document.getElementById('monthlyDividendChart')?.getContext('2d');
-
+    
     // --- 1. 배당 비중 도넛 차트 ---
     if (allocationCtx && allocationData && allocationData.length > 0) {
         const totalDividend = allocationData.reduce((sum, item) => sum + item.value, 0);
@@ -133,116 +130,77 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // --- 2. 월별 배당금 막대 차트 ---
-    if (monthlyCtx && monthlyData && monthlyData.datasets.length > 0) {
-        
-        // 🛠️ 차트 변경: 단순 막대그래프로 복귀
-        const monthlyChart = new Chart(monthlyCtx, {
-            type: 'bar', 
-            data: { 
-                labels: monthlyData.labels, 
-                datasets: [{
-                    label: '월별 배당금',
-                    data: monthlyData.datasets[0].data,
-                    backgroundColor: 'rgba(25, 135, 84, 0.6)',
-                    borderColor: 'rgba(25, 135, 84, 1)',
-                    borderRadius: 4,
-                    borderSkipped: false
-                }]
-            },
-            options: { 
-                responsive: true, maintainAspectRatio: false,
-                layout: { padding: { top: 30 } },
-                plugins: { 
-                    legend: { display: false },
-                    tooltip: { callbacks: { label: (context) => `총액: $${context.parsed.y.toFixed(2)}` } },
-                    datalabels: {
-                        anchor: 'end', align: 'top',
-                        formatter: (value) => value > 0 ? '$' + value.toFixed(2) : null,
-                        color: '#adb5bd', font: { weight: 'bold' }
-                    }
-                }, 
-                scales: { 
-                    x: { grid: { display: false } },
-                    y: { display: false, beginAtZero: true }
-                },
-                onClick: (event, elements) => {
-                    if (elements.length > 0) {
-                        const index = elements[0].index;
-                        renderMonthlyDetails(index);
-                    }
-                }
-            }
-        });
-
-        // --- 3. 월별 상세 정보 렌더링 함수 ---
+    if (monthlyData) {
+        // 🛠️ 리팩토링: 공통 함수를 사용하여 배당금 분석 페이지 차트 렌더링 (클릭 활성화)
+        renderMonthlyDividendChart('monthlyDividendChart', monthlyData, true);
+    }
+    
+    // --- 3. 월별 상세 정보 렌더링 함수 (전역 스코프에 노출) ---
+    window.renderMonthlyDetails = function(index) {
         const monthlyDetailContainer = document.getElementById('monthlyDetail');
         const monthlyDetailTitle = document.getElementById('monthlyDetailTitle');
         const monthlyDetailContent = document.getElementById('monthlyDetailContent');
         const closeButton = document.getElementById('closeMonthlyDetail');
         const detailedData = monthlyData.detailed_data;
+
+        const monthName = monthlyData.labels[index];
+        let dataForMonth = detailedData[index] || [];
         
-        function renderMonthlyDetails(index) {
-            const monthName = monthlyData.labels[index];
-            let dataForMonth = detailedData[index] || [];
-            
-            if (dataForMonth.length === 0) {
-                monthlyDetailContainer.classList.add('d-none');
-                return;
-            }
-
-            dataForMonth.sort((a, b) => new Date(a.pay_date) - new Date(b.pay_date));
-            
-            const totalForMonth = dataForMonth.reduce((sum, item) => sum + item.amount, 0);
-            
-            monthlyDetailTitle.innerHTML = `${monthName} 배당 상세 <span class="text-success fw-bold ms-3">$${totalForMonth.toFixed(2)}</span>`;
-            monthlyDetailContent.innerHTML = '';
-            
-            dataForMonth.forEach(item => {
-                const logoUrl = item.profile?.logo_url || `https://via.placeholder.com/32/cccccc/FFFFFF?text=${item.symbol[0]}`;
-                const payDay = new Date(item.pay_date).getDate();
-                
-                // 🛠️ 기능 개선: 추정치일 경우 정보 아이콘과 툴팁 추가
-                const estimatedIcon = item.is_estimated 
-                    ? `<span class="ms-2" data-bs-toggle="tooltip" data-bs-placement="top" title="과거 기록 기반 추정치">
-                         <i class="fas fa-info-circle text-muted"></i>
-                       </span>`
-                    : '';
-
-                const itemHtml = `
-                <div class="list-group-item d-flex p-2 bg-transparent">
-                    <div class="d-flex flex-column align-items-center me-3" style="width: 3rem;">
-                        <span class="fw-bold fs-5">${payDay}</span>
-                        <small class="text-muted">지급일</small>
-                    </div>
-                    <img src="${logoUrl}" class="stock-logo align-self-center me-3" alt="${item.symbol} logo" loading="lazy" onerror="this.onerror=null; this.src='https://via.placeholder.com/32/cccccc/FFFFFF?text=${item.symbol[0]}';">
-                    <div class="flex-grow-1">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <strong class="mb-0">${item.symbol}${estimatedIcon}</strong>
-                                <small class="company-name text-muted d-block">${item.profile?.name || ''}</small>
-                            </div>
-                            <strong class="text-success fs-5 ms-3">$${item.amount.toFixed(2)}</strong>
-                        </div>
-                        <div class="d-flex justify-content-between text-muted small mt-1">
-                           <span>${item.quantity.toFixed(2)}주 @ $${item.dps_per_payout.toFixed(4)}</span>
-                           <span>배당락일: ${item.ex_dividend_date || 'N/A'}</span>
-                        </div>
-                    </div>
-                </div>`;
-                monthlyDetailContent.innerHTML += itemHtml;
-            });
-
-            // 새로 추가된 툴팁들을 다시 활성화
-            const newTooltipTriggerList = monthlyDetailContent.querySelectorAll('[data-bs-toggle="tooltip"]');
-            [...newTooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
-
-            monthlyDetailContainer.classList.remove('d-none');
-            monthlyDetailContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        if (dataForMonth.length === 0) {
+            monthlyDetailContainer.classList.add('d-none');
+            return;
         }
 
+        dataForMonth.sort((a, b) => new Date(a.pay_date) - new Date(b.pay_date));
+        
+        const totalForMonth = dataForMonth.reduce((sum, item) => sum + item.amount, 0);
+        
+        monthlyDetailTitle.innerHTML = `${monthName} 배당 상세 <span class="text-success fw-bold ms-3">$${totalForMonth.toFixed(2)}</span>`;
+        monthlyDetailContent.innerHTML = '';
+        
+        dataForMonth.forEach(item => {
+            const logoUrl = item.profile?.logo_url || `https://via.placeholder.com/32/cccccc/FFFFFF?text=${item.symbol[0]}`;
+            const payDay = new Date(item.pay_date).getDate();
+            
+            const estimatedIcon = item.is_estimated 
+                ? `<span class="ms-2" data-bs-toggle="tooltip" data-bs-placement="top" title="과거 기록 기반 추정치">
+                     <i class="fas fa-info-circle text-muted"></i>
+                   </span>`
+                : '';
+
+            const itemHtml = `
+            <div class="list-group-item d-flex p-2 bg-transparent">
+                <div class="d-flex flex-column align-items-center me-3" style="width: 3rem;">
+                    <span class="fw-bold fs-5">${payDay}</span>
+                    <small class="text-muted">지급일</small>
+                </div>
+                <img src="${logoUrl}" class="stock-logo align-self-center me-3" alt="${item.symbol} logo" loading="lazy" onerror="this.onerror=null; this.src='https://via.placeholder.com/32/cccccc/FFFFFF?text=${item.symbol[0]}';">
+                <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <strong class="mb-0">${item.symbol}${estimatedIcon}</strong>
+                            <small class="company-name text-muted d-block">${item.profile?.name || ''}</small>
+                        </div>
+                        <strong class="text-success fs-5 ms-3">$${item.amount.toFixed(2)}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted small mt-1">
+                       <span>${item.quantity.toFixed(2)}주 @ $${item.dps_per_payout.toFixed(4)}</span>
+                       <span>배당락일: ${item.ex_dividend_date || 'N/A'}</span>
+                    </div>
+                </div>
+            </div>`;
+            monthlyDetailContent.innerHTML += itemHtml;
+        });
+
+        const newTooltipTriggerList = monthlyDetailContent.querySelectorAll('[data-bs-toggle="tooltip"]');
+        [...newTooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+
+        monthlyDetailContainer.classList.remove('d-none');
+        monthlyDetailContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        
         closeButton.addEventListener('click', () => {
              monthlyDetailContainer.classList.add('d-none');
-        });
+        }, { once: true }); // 한번만 실행되도록 이벤트 리스너 설정
     }
 });
 </script>

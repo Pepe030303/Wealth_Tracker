@@ -139,12 +139,13 @@
 
     <footer class="bg-dark text-white-50 mt-auto py-3">
         <div class="container text-center">
-            {# 🛠️ UI 개선: 푸터에 버전 정보 추가 #}
             <small>© 2025 Wealth Tracker. All Rights Reserved. | Version: {{ app_version }}</small>
         </div>
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    {# 🛠️ 리팩토링: 공통 차트 스크립트 파일 로드 #}
+    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
     {% block scripts %}{% endblock %}
     
     <script>
@@ -190,21 +191,18 @@
             }, 300);
         }
 
-        // 데스크톱 검색창 이벤트 리스너
         const searchInputDesktop = document.getElementById('stockSearchInputDesktop');
         const searchResultsDesktop = document.getElementById('searchResultsDesktop');
         if (searchInputDesktop) {
             searchInputDesktop.addEventListener('input', () => handleSearch(searchInputDesktop, searchResultsDesktop));
         }
 
-        // 모바일 검색창 이벤트 리스너
         const searchInputMobile = document.getElementById('stockSearchInputMobile');
         const searchResultsMobile = document.getElementById('searchResultsMobile');
         if (searchInputMobile) {
             searchInputMobile.addEventListener('input', () => handleSearch(searchInputMobile, searchResultsMobile));
         }
 
-        // 검색창 외부 클릭 시 결과 숨기기
         document.addEventListener('click', function(event) {
             if (searchInputDesktop && !searchInputDesktop.parentElement.contains(event.target)) {
                 searchResultsDesktop.classList.add('d-none');

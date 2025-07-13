@@ -10,13 +10,12 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_login import LoginManager
 import redis
 from rq import Queue
-# 🛠️ 버그 예방: collections.defaultdict를 미리 import
 from collections import defaultdict
 
 logging.basicConfig(level=logging.INFO)
 
 # 🛠️ 버전 업데이트
-APP_VERSION = "v1.3.1" 
+APP_VERSION = "v1.4.0" 
 
 class Base(DeclarativeBase): pass
 db = SQLAlchemy(model_class=Base)
