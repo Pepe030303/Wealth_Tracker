@@ -40,12 +40,11 @@ def calculate_dividend_metrics(holdings, price_data_map):
 
         annual_dps = 0
         if payouts:
-            # 🛠️ 개선: 최근 1년치 실제/예측 배당금의 합으로 연간 배당금(annual_dps)을 계산
             one_year_ago = datetime.now() - timedelta(days=365)
             recent_payouts = [p for p in payouts if p.get('pay_date') and datetime.strptime(p['pay_date'], '%Y-%m-%d') > one_year_ago]
             if recent_payouts:
                 annual_dps = sum(p['amount'] for p in recent_payouts)
-            else: # 1년치 데이터가 없으면 분기 배당으로 추정
+            else: 
                 payouts.sort(key=lambda x: x['amount'], reverse=True)
                 annual_dps = sum(p['amount'] for p in payouts[:4])
 
@@ -83,13 +82,11 @@ def get_projected_dividend_schedule(symbol):
 
     current_year = datetime.now().year
     
-    # 1. 실제 공시된 현재 연도 배당금 추출 (미래 확정 포함)
     actual_payouts = {
         (datetime.strptime(p['pay_date'], '%Y-%m-%d').month, datetime.strptime(p['pay_date'], '%Y-%m-%d').day): {**p, 'is_estimated': False}
         for p in historical_payouts if p.get('pay_date') and datetime.strptime(p['pay_date'], '%Y-%m-%d').year == current_year
     }
 
-    # 2. 과거 데이터를 기반으로 배당 패턴(월, 평균일, 평균금액) 분석
     monthly_pattern = defaultdict(lambda: {'pay_days': [], 'ex_days': [], 'amounts': []})
     for p in historical_payouts:
         if p.get('pay_date') and p.get('ex_date'):
@@ -99,28 +96,24 @@ def get_projected_dividend_schedule(symbol):
             monthly_pattern[pay_dt.month]['ex_days'].append(ex_dt.day)
             monthly_pattern[pay_dt.month]['amounts'].append(p['amount'])
 
-    # 3. 예측 배당 생성 및 실제 데이터와 병합
     final_payouts = list(actual_payouts.values())
     
     for month, data in monthly_pattern.items():
         avg_pay_day = int(sum(data['pay_days']) / len(data['pay_days']))
         
-        # 이미 해당 월/일에 실제 데이터가 있으면 건너뜀
         if (month, avg_pay_day) in actual_payouts:
             continue
             
         avg_ex_day = int(sum(data['ex_days']) / len(data['ex_days']))
         avg_amount = sum(data['amounts']) / len(data['amounts'])
         
-        # 🛠️ 개선: 배당락일이 없는 경우를 대비하여 예측일 생성.
-        # ex_date의 월은 pay_date의 월과 다를 수 있으므로, 날짜 계산에 주의.
         try:
-            pay_date_obj = datetime(current_year, month, avg_pay_ay)
-            # 보통 배당락일은 지급일보다 이전이므로, 한 달 빼줌
+            # 🛠️ 버그 수정: avg_pay_ay를 avg_pay_day로 수정
+            pay_date_obj = datetime(current_year, month, avg_pay_day)
             est_ex_date_month = month - 1 if month > 1 else 12
             est_ex_date_year = current_year if month > 1 else current_year -1
             projected_ex_date = datetime(est_ex_date_year, est_ex_date_month, avg_ex_day).strftime('%Y-%m-%d')
-        except ValueError: # 2월 29일 같은 예외 처리
+        except ValueError:
             projected_ex_date = datetime(current_year, month, 1).strftime('%Y-%m-%d')
 
 
