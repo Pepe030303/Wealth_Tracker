@@ -7,7 +7,7 @@ from datetime import datetime
 
 def get_monthly_dividend_distribution(dividend_metrics):
     """
-    [기준 변경] 월별 배당금을 계산할 때, Finnhub에서 제공하는 '지급일(PayDate)'을 기준으로 집계합니다.
+    [기준 변경] 월별 배당금을 계산할 때, Polygon.io에서 제공하는 '지급일(pay_date)'을 기준으로 집계합니다.
     """
     detailed_monthly_data = {i: [] for i in range(12)}
     
@@ -19,14 +19,13 @@ def get_monthly_dividend_distribution(dividend_metrics):
             continue
             
         for payout in payout_schedule:
-            # 🛠️ 변경: 집계 기준을 배당락일(ex_date)에서 지급일(pay_date)로 변경
+            # 🛠️ 변경: 집계 기준을 정확한 지급일(pay_date)로 사용
             if not payout.get('pay_date'):
                 continue # 지급일 정보가 없으면 건너뜀
                 
             payout_date = datetime.strptime(payout['pay_date'], '%Y-%m-%d')
             month_index = payout_date.month - 1
             
-            # 🛠️ 변경: 상세 데이터에 지급일(pay_date)과 배당락일(ex_date)을 모두 포함
             detailed_monthly_data[month_index].append({
                 'symbol': symbol,
                 'amount': payout['amount'] * metrics.get('quantity', 0),
@@ -63,7 +62,6 @@ def get_portfolio_analysis_data(user_id):
     dividend_metrics = calculate_dividend_metrics(holdings, price_data_map)
     for symbol, metrics in dividend_metrics.items():
         dividend_schedule = get_dividend_payout_schedule(symbol)
-        # 🛠️ 변경: 월 목록도 지급일 기준으로 생성된 것을 사용
         metrics['payout_months'] = dividend_schedule.get('months', [])
         metrics['profile'] = profile_data_map.get(symbol, {})
         metrics['quantity'] = next((h.quantity for h in holdings if h.symbol == symbol), 0)
