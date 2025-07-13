@@ -20,6 +20,11 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# 🛠️ 기능 추가: Finnhub API 키를 환경변수에서 로드
+FINNHUB_API_KEY = os.environ.get('FINNHUB_API_KEY')
+if not FINNHUB_API_KEY:
+    logger.warning("FINNHUB_API_KEY 환경 변수가 설정되지 않았습니다. 배당금 정보 조회가 제한될 수 있습니다.")
+
 US_STOCKS_LIST = []
 US_STOCKS_FILE = 'us_stocks.json'
 
@@ -91,7 +96,6 @@ class StockAPIService:
             tickers_str = " ".join(symbols_to_fetch)
             tickers = yf.Tickers(tickers_str)
             for symbol, ticker_obj in tickers.tickers.items():
-                # 🛠️ Fixed: 'progress' 인수는 yf.Tickers() 내의 개별 history() 호출에서 지원되지 않으므로 제거합니다.
                 hist = ticker_obj.history(period="2d", auto_adjust=True)
                 if not hist.empty and len(hist) >= 2:
                     price_data = {
