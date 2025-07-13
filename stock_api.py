@@ -20,10 +20,12 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# 🛠️ 기능 추가: Finnhub API 키를 환경변수에서 로드
-FINNHUB_API_KEY = os.environ.get('FINNHUB_API_KEY')
-if not FINNHUB_API_KEY:
-    logger.warning("FINNHUB_API_KEY 환경 변수가 설정되지 않았습니다. 배당금 정보 조회가 제한될 수 있습니다.")
+# 🛠️ 변경: Finnhub 키 대신 Polygon.io API 키를 환경변수에서 로드
+FINNHUB_API_KEY = os.environ.get('FINNHUB_API_KEY') # 이전 버전 호환성을 위해 남겨둘 수 있음
+POLYGON_API_KEY = os.environ.get('POLYGON_API_KEY')
+
+if not POLYGON_API_KEY:
+    logger.warning("POLYGON_API_KEY 환경 변수가 설정되지 않았습니다. 배당금 정보 조회가 제한될 수 있습니다.")
 
 US_STOCKS_LIST = []
 US_STOCKS_FILE = 'us_stocks.json'
