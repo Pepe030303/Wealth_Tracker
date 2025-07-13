@@ -83,36 +83,24 @@ document.addEventListener('DOMContentLoaded', function () {
     const dividendCtx = document.getElementById('monthlyDividendChart')?.getContext('2d');
 
     if (sectorCtx && sectorData && sectorData.length > 0) {
-        // [차트 개선] 섹터 트리맵 차트 로직 전면 수정
         const totalPortfolioValue = sectorData.reduce((sum, sector) => sum + sector.value, 0);
-
         new Chart(sectorCtx, {
             type: 'treemap',
             data: { 
                 datasets: [{
-                    // [오류 수정] 데이터 구조를 단순화하고 필요한 모든 정보를 명시적으로 포함
-                    tree: sectorData,
-                    key: 'value', // 차트 크기 기준
-                    groups: ['sector'], // 그룹화 기준
-                    // 데이터 라벨 설정 (차트 내부에 표시될 텍스트)
+                    tree: sectorData, key: 'value', groups: ['sector'], 
                     labels: {
-                        display: true,
-                        color: 'white',
-                        font: { size: 16, weight: 'bold' },
-                        // [가독성 개선] 배경색과 대비되는 텍스트 테두리 추가
-                        textStrokeColor: 'rgba(0,0,0,0.6)',
-                        textStrokeWidth: 2,
+                        display: true, color: 'white', font: { size: 16, weight: 'bold' },
+                        textStrokeColor: 'rgba(0,0,0,0.6)', textStrokeWidth: 2,
                         formatter(context) {
                             if (context.raw) {
                                 const item = context.raw;
                                 const percentage = (item.v / totalPortfolioValue * 100).toFixed(1);
-                                // [오류 수정] .g (group) 속성을 사용하여 올바른 섹터 이름 표시
                                 return [item.g, `$${item.v.toFixed(0)}`, `(${percentage}%)`];
                             }
                             return null;
                         }
                     },
-                    // 각 섹터별 배경색
                     backgroundColor: (ctx) => {
                         const colors = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0', '#6f42c1', '#fd7e14'];
                         if (ctx.type === 'dataset') return 'transparent';
@@ -123,22 +111,13 @@ document.addEventListener('DOMContentLoaded', function () {
             options: {
                 plugins: {
                     legend: { display: false },
-                    // [가독성 개선] 툴팁(마우스 오버) 설정
                     tooltip: {
-                        titleFont: { size: 14, weight: 'bold' },
-                        bodyFont: { size: 12 },
+                        titleFont: { size: 14, weight: 'bold' }, bodyFont: { size: 12 },
                         callbacks: {
-                            title: function(tooltipItems) {
-                                const item = tooltipItems[0].raw;
-                                // [오류 수정] .g 속성으로 섹터 이름 표시
-                                return `${item.g} | $${item.v.toFixed(2)}`;
-                            },
-                            // [오류 수정] 툴팁 본문에 상세 종목 정보 표시
+                            title: function(tooltipItems) { return `${tooltipItems[0].raw.g} | $${tooltipItems[0].raw.v.toFixed(2)}`; },
                             label: function(context) {
-                                const item = context.raw;
-                                const holdings = item._data.holdings || [];
+                                const item = context.raw; const holdings = item._data.holdings || [];
                                 let holdingsText = ['\nHoldings:'];
-                                
                                 holdings.forEach(h => {
                                     const percentage = (h.value / item.v * 100).toFixed(1);
                                     holdingsText.push(`  ${h.symbol}: $${h.value.toFixed(2)} (${percentage}%)`);
@@ -153,7 +132,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (dividendCtx && monthlyData && monthlyData.datasets.length > 0) {
-        // 🛠️ 변경: 대시보드 차트를 월별 총합 단일 막대그래프로 변경
         const monthlyTotals = monthlyData.datasets.reduce((acc, dataset) => {
             dataset.data.forEach((value, i) => { acc[i] = (acc[i] || 0) + value; });
             return acc;
@@ -169,13 +147,13 @@ document.addEventListener('DOMContentLoaded', function () {
                     backgroundColor: 'rgba(25, 135, 84, 0.6)',
                     borderColor: 'rgba(25, 135, 84, 1)',
                     borderWidth: 1,
-                    borderRadius: 8, // 둥근 막대 스타일
+                    borderRadius: 8,
                     borderSkipped: false,
                 }]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                layout: { padding: { top: 30 } }, // 라벨 잘림 방지
+                layout: { padding: { top: 30 } },
                 plugins: {
                     legend: { display: false },
                     tooltip: {
@@ -189,87 +167,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 },
                 scales: { 
                     x: { grid: { display: false } },
-                    y: { display: false, beginAtZero: true } // Y축 제거
+                    y: { display: false, beginAtZero: true }
                 }
-                // 대시보드에서는 onClick 이벤트 없음
             }
         });
     }
 });
 </script>
-{% endblock %}```
-
-#### `# 📄 templates/holdings.html`
-
-```html
-{# 📄 templates/holdings.html #}
-
-{% extends "base.html" %}
-{% block title %}보유 종목 - Wealth Tracker{% endblock %}
-{% block content %}
-<div class="row">
-    <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1><i class="fas fa-wallet me-2"></i>보유 종목</h1>
-            <a href="{{ url_for('main.trades') }}" class="btn btn-primary"><i class="fas fa-exchange-alt me-1"></i>거래 기록으로 이동</a>
-        </div>
-    </div>
-</div>
-<div class="card">
-    <div class="card-body p-0">
-        {% if holdings_data %}
-            <div class="list-group list-group-flush">
-                {% for data in holdings_data %}
-                <div class="list-group-item p-3">
-                    <div class="row align-items-center g-3">
-                        {# 좌측: 종목 로고, 심볼, 이름 #}
-                        <div class="col-lg-3 d-flex align-items-center">
-                            {% if data.profile and data.profile.logo_url %}
-                                {# 🛠️ Fixed: API 실패 시 기본 플레이스홀더 이미지 표시 #}
-                                <img src="{{ data.profile.logo_url }}" class="stock-logo" alt="{{ data.holding.symbol }} logo"
-                                     onerror="this.onerror=null; this.src='https://via.placeholder.com/32/cccccc/FFFFFF?text={{ data.holding.symbol[0] }}';">
-                            {% else %}
-                                <div class="stock-logo placeholder">
-                                    <span>{{ data.holding.symbol[0] }}</span>
-                                </div>
-                            {% endif %}
-                            <div>
-                                <h5 class="mb-0 fw-bold">{{ data.holding.symbol }}</h5>
-                                <span class="company-name">{{ data.profile.name if data.profile else 'N/A' }}</span>
-                            </div>
-                        </div>
-
-                        {# 우측: 재무 상세 정보 (간결한 레이아웃) #}
-                        <div class="col-lg-9">
-                            <div class="row text-center text-lg-start">
-                                <div class="col-md-4 col-sm-6 mb-2 mb-md-0">
-                                    <small class="text-muted d-block">현재가 / 평단가</small>
-                                    <strong>${{ "%.2f"|format(data.current_price) }}</strong> / <span class="text-muted">${{ "%.2f"|format(data.holding.purchase_price) }}</span>
-                                </div>
-                                <div class="col-md-4 col-sm-6 mb-2 mb-md-0">
-                                    <small class="text-muted d-block">평가금액 / 투자금액</small>
-                                    <strong>${{ "%.2f"|format(data.current_value) }}</strong> / <span class="text-muted">${{ "%.2f"|format(data.total_cost) }}</span>
-                                </div>
-                                <div class="col-md-4 col-sm-12">
-                                     <small class="text-muted d-block">손익 (수익률)</small>
-                                     <strong class="{% if data.profit_loss >= 0 %}text-success{% else %}text-danger{% endif %}">
-                                        ${{ '%+.2f'|format(data.profit_loss) }}
-                                        <span class="ms-1">({{ '%+.2f'|format(data.profit_loss_percent) }}%)</span>
-                                    </strong>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <div class="text-center py-5">
-                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                <p class="text-muted">보유 종목이 없습니다.</p>
-                <a href="{{ url_for('main.trades') }}" class="btn btn-primary"><i class="fas fa-plus me-1"></i>거래 추가하기</a>
-            </div>
-        {% endif %}
-    </div>
-</div>
-{% endblock %}
+<!-- 🛠️ Fixed: Jinja2 템플릿 렌더링 오류를 유발하는 중복된 'title' 블록을 제거합니다. -->
