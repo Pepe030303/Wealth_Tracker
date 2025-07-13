@@ -26,14 +26,12 @@ def get_monthly_dividend_distribution(dividend_metrics):
         if payout_months and payout_count > 0 and metrics.get('expected_annual_dividend'):
             amount_per_payout = metrics['expected_annual_dividend'] / payout_count
             
-            # 🛠️ 개선: 1회 지급 시 주당 배당금 계산
             dps_per_payout = (metrics.get('dividend_per_share', 0) / payout_count) if payout_count > 0 else 0
 
             for month_str in payout_months:
                 if month_str in month_map:
                     month_index = month_map[month_str]
                     monthly_data_by_symbol[symbol][month_index] += amount_per_payout
-                    # 🛠️ 개선: 상세 데이터에 수량 및 주당 배당금 정보 추가
                     detailed_monthly_data[month_index].append({
                         'symbol': symbol,
                         'amount': amount_per_payout,
@@ -42,7 +40,6 @@ def get_monthly_dividend_distribution(dividend_metrics):
                         'dps_per_payout': dps_per_payout
                     })
 
-    # Chart.js가 요구하는 datasets 형식으로 변환 (스택 차트용 - 대시보드에서 사용)
     datasets = []
     colors = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2']
     color_index = 0
@@ -75,10 +72,19 @@ def get_portfolio_analysis_data(user_id):
     
     dividend_metrics = calculate_dividend_metrics(holdings, price_data_map)
     for symbol, metrics in dividend_metrics.items():
+        # 현재 평가금액 계산
+        h = next((h for h in holdings if h.symbol == symbol), None)
+        current_price = price_data_map.get(symbol, {}).get('price') or (h.purchase_price if h else 0)
+        quantity = h.quantity if h else 0
+        current_value = current_price * quantity
+
+        # 정보 추가
         dividend_info = get_dividend_months(symbol)
         metrics['payout_months'] = dividend_info.get("months", [])
         metrics['profile'] = profile_data_map.get(symbol, {})
-        metrics['quantity'] = next((h.quantity for h in holdings if h.symbol == symbol), 0)
+        metrics['quantity'] = quantity
+        # 🛠️ 개선: 정렬을 위해 'current_value' 필드 추가
+        metrics['current_value'] = current_value
 
 
     total_investment = sum(h.quantity * h.purchase_price for h in holdings)
