@@ -2,7 +2,8 @@
 
 from stock_api import stock_api
 from utils import calculate_dividend_metrics, get_dividend_payout_schedule
-# 🛠️ 기능 추가: DB 모델 직접 사용
+# 🛠️ 버그 수정: NameError 해결을 위해 db 객체를 app 모듈에서 import 합니다.
+from app import db
 from models import Holding, Dividend
 from datetime import datetime
 from sqlalchemy import func, extract
@@ -134,7 +135,6 @@ def get_portfolio_analysis_data(user_id):
     total_profit_loss = total_current_value - total_investment
     summary_data = {'total_investment': total_investment, 'total_current_value': total_current_value, 'total_profit_loss': total_profit_loss, 'total_return_percent': (total_profit_loss / total_investment * 100) if total_investment > 0 else 0}
     
-    # 🛠️ 변경: 새로운 분리형 배당 데이터 함수 호출
     monthly_dividend_data = get_differentiated_monthly_dividends(user_id, holdings, dividend_metrics)
     
     return {
