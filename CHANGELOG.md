@@ -3,6 +3,13 @@
 이 프로젝트의 모든 주요 변경 사항은 이 파일에 기록됩니다.
 이 형식은 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)을 따르며, 이 프로젝트는 [유의적 버전](https://semver.org/spec/v2.0.0.html)을 준수합니다.
 
+## [v0.6.2] - 2025-07-13
+### Fixed
+- **API 호출 오류 수정**: `yfinance` 벌크 API 호출 시 지원되지 않는 `progress` 인수를 사용하여 발생하던 `TypeError`를 수정했습니다.
+- **템플릿 렌더링 오류 수정**: 대시보드 템플릿(`dashboard.html`)에서 `title` 블록이 중복 정의되어 발생하던 `TemplateAssertionError`를 수정했습니다.
+
+---
+
 ## [v0.6.1] - 2025-07-13
 ### Changed
 - **UI 일관성 강화**: 대시보드의 월별 배당금 차트 스타일(단일 둥근 막대, Y축 제거 등)을 배당금 분석 페이지와 통일하여 시각적 일관성을 확보했습니다.
