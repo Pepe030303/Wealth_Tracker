@@ -7,30 +7,34 @@ from datetime import datetime
 
 def get_monthly_dividend_distribution(dividend_metrics):
     """
-    [기능 개선] 월별 배당금을 계산할 때, 상세 배당락일 정보를 포함하여 반환.
+    [기준 변경] 월별 배당금을 계산할 때, Finnhub에서 제공하는 '지급일(PayDate)'을 기준으로 집계합니다.
     """
     detailed_monthly_data = {i: [] for i in range(12)}
     
     for symbol, metrics in dividend_metrics.items():
-
-        # 🛠️ Refactoring: 반환된 딕셔너리에서 'payouts' 리스트를 직접 사용
         dividend_schedule = get_dividend_payout_schedule(symbol)
-        payout_schedule = dividend_schedule['payouts']
+        payout_schedule = dividend_schedule.get('payouts', [])
         
         if not payout_schedule:
             continue
             
         for payout in payout_schedule:
-            payout_date = datetime.strptime(payout['date'], '%Y-%m-%d')
+            # 🛠️ 변경: 집계 기준을 배당락일(ex_date)에서 지급일(pay_date)로 변경
+            if not payout.get('pay_date'):
+                continue # 지급일 정보가 없으면 건너뜀
+                
+            payout_date = datetime.strptime(payout['pay_date'], '%Y-%m-%d')
             month_index = payout_date.month - 1
             
+            # 🛠️ 변경: 상세 데이터에 지급일(pay_date)과 배당락일(ex_date)을 모두 포함
             detailed_monthly_data[month_index].append({
                 'symbol': symbol,
                 'amount': payout['amount'] * metrics.get('quantity', 0),
                 'profile': metrics.get('profile', {}),
                 'quantity': metrics.get('quantity', 0),
                 'dps_per_payout': payout['amount'],
-                'ex_dividend_date': payout['date']
+                'ex_dividend_date': payout.get('ex_date'),
+                'pay_date': payout.get('pay_date')
             })
 
     monthly_totals = [0] * 12
@@ -42,41 +46,6 @@ def get_monthly_dividend_distribution(dividend_metrics):
         'datasets': [{'data': monthly_totals}],
         'detailed_data': detailed_monthly_data
     }
-=======
-        if symbol not in monthly_data_by_symbol: monthly_data_by_symbol[symbol] = [0] * 12
-        dividend_info = get_dividend_months(symbol)
-        payout_months = dividend_info.get("months", [])
-        payout_count = dividend_info.get("count", 0)
-        if payout_months and payout_count > 0 and metrics.get('expected_annual_dividend'):
-            amount_per_payout = metrics['expected_annual_dividend'] / payout_count
-
-            
-            # 🛠️ 개선: 1회 지급 시 주당 배당금 계산
-
-            dps_per_payout = (metrics.get('dividend_per_share', 0) / payout_count) if payout_count > 0 else 0
-            for month_str in payout_months:
-                if month_str in month_map:
-                    month_index = month_map[month_str]
-                    monthly_data_by_symbol[symbol][month_index] += amount_per_payout
-                    # 🛠️ 개선: 상세 데이터에 수량 및 주당 배당금 정보 추가
-                    detailed_monthly_data[month_index].append({
-                        'symbol': symbol, 'amount': amount_per_payout,
-                        'profile': metrics.get('profile', {}),
-                        'quantity': metrics.get('quantity', 0),
-                        'dps_per_payout': dps_per_payout
-                    })
-
-
-    # Chart.js가 요구하는 datasets 형식으로 변환 (스택 차트용 - 대시보드에서 사용)
-
-    datasets = []
-    colors = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2']
-    color_index = 0
-    for symbol, data in monthly_data_by_symbol.items():
-        datasets.append({'label': symbol, 'data': [round(d, 2) for d in data], 'backgroundColor': colors[color_index % len(colors)]})
-        color_index += 1
-    return {'labels': [f"{i+1}월" for i in range(12)], 'datasets': datasets, 'detailed_data': detailed_monthly_data}
-
 
 
 def get_portfolio_analysis_data(user_id):
@@ -93,22 +62,9 @@ def get_portfolio_analysis_data(user_id):
     
     dividend_metrics = calculate_dividend_metrics(holdings, price_data_map)
     for symbol, metrics in dividend_metrics.items():
-
-        h = next((h for h in holdings if h.symbol == symbol), None)
-        current_price = price_data_map.get(symbol, {}).get('price') or (h.purchase_price if h else 0)
-        quantity = h.quantity if h else 0
-        current_value = current_price * quantity
-        
-        # 🛠️ Refactoring: 복잡한 계산 로직을 제거하고, 반환된 딕셔너리에서 'months'를 직접 사용
         dividend_schedule = get_dividend_payout_schedule(symbol)
-        metrics['payout_months'] = dividend_schedule['months']
-
-        metrics['profile'] = profile_data_map.get(symbol, {})
-        metrics['quantity'] = quantity
-        metrics['current_value'] = current_value
-
-        dividend_info = get_dividend_months(symbol)
-        metrics['payout_months'] = dividend_info.get("months", [])
+        # 🛠️ 변경: 월 목록도 지급일 기준으로 생성된 것을 사용
+        metrics['payout_months'] = dividend_schedule.get('months', [])
         metrics['profile'] = profile_data_map.get(symbol, {})
         metrics['quantity'] = next((h.quantity for h in holdings if h.symbol == symbol), 0)
 
