@@ -19,7 +19,6 @@
             <div class="card-header"><h5 class="card-title mb-0">종목별 연간 배당금</h5></div>
             <div class="card-body p-0">
                 <div class="list-group list-group-flush">
-                    {# 🛠️ 변경: 정렬된 list를 순회하도록 변경 #}
                     {% for symbol, metrics in dividend_metrics %}
                     <div class="list-group-item p-3">
                         <div class="d-flex align-items-center">
@@ -27,14 +26,13 @@
                                 {{ render_stock_logo(metrics.profile, symbol) }}
                             </div>
                             <div class="flex-grow-1">
-                                <div class="d-flex justify-content-between">
-                                    <h5 class="mb-0 fw-bold">{{ symbol }}</h5>
-                                    <small class="text-muted">{{ metrics.quantity|round(2) }}주 @ ${{ "%.4f"|format(metrics.dividend_per_share) }}/주</small>
-                                </div>
-                                <div class="d-flex justify-content-between align-items-end">
+                                <h5 class="mb-0 fw-bold">{{ symbol }}</h5>
+                                {# 🛠️ UI 개선: 배당금 텍스트 포맷 변경 #}
+                                <small class="text-muted">{{ metrics.quantity|round(2) }}주 - 1주당 ${{ "%.4f"|format(metrics.dividend_per_share) }}</small>
+                                <div class="d-flex justify-content-between align-items-end mt-1">
                                     {# 🛠️ UI 개선: 배당월 표시 방식 변경 #}
-                                    <div class="dividend-months d-flex flex-wrap gap-1 mt-1">
-                                        {% if metrics.payout_months|length >= 12 %}
+                                    <div class="dividend-months d-flex flex-wrap gap-1">
+                                        {% if metrics.payout_count_last_12m >= 12 %}
                                             <span class="badge bg-info-subtle text-info-emphasis">월배당</span>
                                         {% else %}
                                             {% set months_in_korean = metrics.payout_months | korean_dividend_months %}
@@ -99,4 +97,117 @@
     <p class="text-muted">배당 정보가 없습니다. 배당 정보를 가져오려면 거래 기록을 추가해주세요.</p>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+
+    Chart.register(ChartDataLabels);
+
+    const allocationData = {{ allocation_data|tojson }};
+    const allocationCtx = document.getElementById('dividendAllocationChart')?.getContext('2d');
+    const monthlyData = {{ monthly_dividend_data|tojson }};
+    
+    // --- 1. 배당 비중 도넛 차트 ---
+    if (allocationCtx && allocationData && allocationData.length > 0) {
+        new Chart(allocationCtx, {
+            type: 'doughnut',
+            data: { labels: allocationData.map(i => i.symbol), datasets: [{ data: allocationData.map(i => i.value), backgroundColor: ['#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2'], borderColor: '#343a40' }] },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                plugins: { 
+                    legend: { position: 'right' }, 
+                    datalabels: { display: false },
+                    tooltip: { callbacks: { label: function(context) { const label = context.label || ''; const value = context.parsed; const percentage = (value / totalDividend * 100).toFixed(2); return ` ${label}: $${value.toFixed(2)} (${percentage}%)`; } } } 
+                } 
+            }
+        });
+    }
+
+    // --- 2. 월별 배당금 막대 차트 ---
+    if (monthlyData) {
+        renderMonthlyDividendChart('monthlyDividendChart', monthlyData, true);
+    }
+    
+    // --- 3. 월별 상세 정보 렌더링 함수 (전역 스코프에 노출) ---
+    window.renderMonthlyDetails = function(index) {
+        const monthlyDetailContainer = document.getElementById('monthlyDetail');
+        const monthlyDetailTitle = document.getElementById('monthlyDetailTitle');
+        const monthlyDetailContent = document.getElementById('monthlyDetailContent');
+        const closeButton = document.getElementById('closeMonthlyDetail');
+        const detailedData = monthlyData.detailed_data;
+
+        const monthName = monthlyData.labels[index];
+        let dataForMonth = detailedData[index] || [];
+        
+        if (dataForMonth.length === 0) {
+            monthlyDetailContainer.classList.add('d-none');
+            return;
+        }
+
+        dataForMonth.sort((a, b) => new Date(a.pay_date) - new Date(b.pay_date));
+        
+        const totalForMonth = dataForMonth.reduce((sum, item) => sum + item.amount, 0);
+        
+        monthlyDetailTitle.innerHTML = `${monthName} 배당 상세 <span class="text-success fw-bold ms-3">$${totalForMonth.toFixed(2)}</span>`;
+        monthlyDetailContent.innerHTML = '';
+        
+        dataForMonth.forEach(item => {
+            const logoUrl = item.profile?.logo_url || `https://via.placeholder.com/32/cccccc/FFFFFF?text=${item.symbol[0]}`;
+            const payDay = new Date(item.pay_date).getDate();
+            
+            const estimatedIcon = item.is_estimated 
+                ? `<span class="ms-2" data-bs-toggle="tooltip" data-bs-placement="top" title="과거 기록 기반 추정치">
+                     <i class="fas fa-info-circle text-muted"></i>
+                   </span>`
+                : '';
+
+            const itemHtml = `
+            <div class="list-group-item d-flex p-2 bg-transparent">
+                <div class="d-flex flex-column align-items-center me-3" style="width: 3rem;">
+                    <span class="fw-bold fs-5">${payDay}</span>
+                    <small class="text-muted">지급일</small>
+                </div>
+                <img src="${logoUrl}" class="stock-logo align-self-center me-3" alt="${item.symbol} logo" loading="lazy" onerror="this.onerror=null; this.src='https://via.placeholder.com/32/cccccc/FFFFFF?text=${item.symbol[0]}';">
+                <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <strong class="mb-0">${item.symbol}${estimatedIcon}</strong>
+                            <small class="company-name text-muted d-block">${item.profile?.name || ''}</small>
+                        </div>
+                        <strong class="text-success fs-5 ms-3">$${item.amount.toFixed(2)}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted small mt-1">
+                       <span>${item.quantity.toFixed(2)}주 @ $${item.dps_per_payout.toFixed(4)}</span>
+                       <span>배당락일: ${item.ex_dividend_date || 'N/A'}</span>
+                    </div>
+                </div>
+            </div>`;
+            monthlyDetailContent.innerHTML += itemHtml;
+        });
+
+        const newTooltipTriggerList = monthlyDetailContent.querySelectorAll('[data-bs-toggle="tooltip"]');
+        [...newTooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+
+        monthlyDetailContainer.classList.remove('d-none');
+        monthlyDetailContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        
+        closeButton.addEventListener('click', () => {
+             monthlyDetailContainer.classList.add('d-none');
+             // 차트 강조 효과 초기화
+             const chart = Chart.getChart("monthlyDividendChart");
+             if (chart) {
+                const dataset = chart.data.datasets[0];
+                dataset.backgroundColor = 'rgba(25, 135, 84, 0.6)'; // 원래 색으로 복원
+                chart.update();
+             }
+        }, { once: true });
+    }
+});
+</script>
 {% endblock %}

@@ -87,38 +87,31 @@ def get_portfolio_analysis_data(user_id):
     price_data_map = stock_api.get_stock_prices_bulk(symbols)
     profile_data_map = stock_api.get_stock_profiles_bulk(symbols)
     
-    dividend_metrics = {}
-    # 🛠️ 개선: 정렬을 위해 종목별 평가금액 미리 계산
+    temp_metrics = {}
     for h in holdings:
         current_price = price_data_map.get(h.symbol, {}).get('price', h.purchase_price)
         current_value = h.quantity * current_price
         
-        temp_metrics = calculate_dividend_metrics([h], price_data_map)
-        dividend_metrics[h.symbol] = temp_metrics.get(h.symbol, {})
-        dividend_metrics[h.symbol]['current_value'] = current_value
+        calculated_metrics = calculate_dividend_metrics([h], price_data_map)
+        
+        metrics = calculated_metrics.get(h.symbol, {})
+        metrics['current_value'] = current_value
         
         schedule_data = get_projected_dividend_schedule(h.symbol)
-        dividend_metrics[h.symbol]['payout_months'] = schedule_data.get('months', [])
-        dividend_metrics[h.symbol]['profile'] = profile_data_map.get(h.symbol, {})
-        dividend_metrics[h.symbol]['quantity'] = h.quantity
+        metrics['payout_months'] = schedule_data.get('months', [])
+        # 🛠️ 기능 추가: 월배당 판단을 위해 배당 횟수 추가
+        metrics['payout_count_last_12m'] = schedule_data.get('payout_count_last_12m', 0)
+        metrics['profile'] = profile_data_map.get(h.symbol, {})
+        metrics['quantity'] = h.quantity
+        temp_metrics[h.symbol] = metrics
 
     # 🛠️ 기능 개선: 평가금액(current_value) 기준으로 내림차순 정렬
-    sorted_dividend_metrics = sorted(dividend_metrics.items(), key=lambda item: item[1].get('current_value', 0), reverse=True)
+    sorted_dividend_metrics = sorted(temp_metrics.items(), key=lambda item: item[1].get('current_value', 0), reverse=True)
     
     total_investment = sum(h.quantity * h.purchase_price for h in holdings)
     total_current_value = sum(item[1]['current_value'] for item in sorted_dividend_metrics)
     
-    sector_details = {}
-    for h in holdings:
-        profile = profile_data_map.get(h.symbol, {}); 
-        sector = profile.get('sector', 'N/A')
-        current_value = h.quantity * (price_data_map.get(h.symbol, {}).get('price', h.purchase_price))
-        if sector not in sector_details:
-            sector_details[sector] = {'total_value': 0, 'holdings': []}
-        sector_details[sector]['total_value'] += current_value
-        sector_details[sector]['holdings'].append({'symbol': h.symbol, 'value': current_value})
-
-    sector_allocation = [{'sector': sector, 'value': details['total_value'], 'holdings': sorted(details['holdings'], key=lambda x: x['value'], reverse=True)} for sector, details in sector_details.items()]
+    # 대시보드 요약용 데이터는 여기서 처리하지 않고 routes에서 직접 처리
     
     total_profit_loss = total_current_value - total_investment
     summary_data = {
@@ -133,8 +126,6 @@ def get_portfolio_analysis_data(user_id):
     return {
         "holdings": holdings,
         "summary": summary_data,
-        "sector_allocation": sector_allocation,
-        # 🛠️ 변경: 정렬된 데이터 전달
         "dividend_metrics": sorted_dividend_metrics,
         "monthly_dividend_data": monthly_dividend_data,
     }
