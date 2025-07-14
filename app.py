@@ -3,7 +3,7 @@
 import os
 import logging
 from datetime import datetime
-from flask import Flask, g
+from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -15,7 +15,7 @@ from collections import defaultdict
 logging.basicConfig(level=logging.INFO)
 
 # 🛠️ 버전 업데이트
-APP_VERSION = "v1.6.0" 
+APP_VERSION = "v1.7.0" 
 
 class Base(DeclarativeBase): pass
 db = SQLAlchemy(model_class=Base)

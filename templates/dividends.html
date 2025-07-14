@@ -28,7 +28,7 @@
                             <div class="flex-grow-1">
                                 <h5 class="mb-0 fw-bold">{{ symbol }}</h5>
                                 {# 🛠️ UI 개선: 배당금 텍스트 포맷 변경 #}
-                                <small class="text-muted">{{ metrics.quantity|round(2) }}주 - 1주당 ${{ "%.4f"|format(metrics.dividend_per_share) }}</small>
+                                <small class="text-muted">{{ metrics.quantity|round(2) }}주 - 1주당 ${{ "%.4f"|format(metrics.dividend_per_share) if metrics.dividend_per_share else 0.0 }}</small>
                                 <div class="d-flex justify-content-between align-items-end mt-1">
                                     {# 🛠️ UI 개선: 배당월 표시 방식 변경 #}
                                     <div class="dividend-months d-flex flex-wrap gap-1">
@@ -114,16 +114,32 @@ document.addEventListener('DOMContentLoaded', function () {
     
     // --- 1. 배당 비중 도넛 차트 ---
     if (allocationCtx && allocationData && allocationData.length > 0) {
+        // 🛠️ 버그 수정: allocation_data는 dict에서 list로 변경되었으므로 reduce 로직 수정
+        const totalDividend = allocationData.reduce((sum, item) => sum + item.value, 0);
         new Chart(allocationCtx, {
             type: 'doughnut',
-            data: { labels: allocationData.map(i => i.symbol), datasets: [{ data: allocationData.map(i => i.value), backgroundColor: ['#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2'], borderColor: '#343a40' }] },
+            data: { 
+                labels: allocationData.map(i => i.symbol), 
+                datasets: [{ 
+                    data: allocationData.map(i => i.value), 
+                    backgroundColor: ['#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2'], 
+                    borderColor: '#343a40' 
+                }] 
+            },
             options: { 
                 responsive: true, 
                 maintainAspectRatio: false, 
                 plugins: { 
                     legend: { position: 'right' }, 
                     datalabels: { display: false },
-                    tooltip: { callbacks: { label: function(context) { const label = context.label || ''; const value = context.parsed; const percentage = (value / totalDividend * 100).toFixed(2); return ` ${label}: $${value.toFixed(2)} (${percentage}%)`; } } } 
+                    tooltip: { callbacks: { 
+                        label: function(context) { 
+                            const label = context.label || ''; 
+                            const value = context.parsed; 
+                            const percentage = totalDividend > 0 ? (value / totalDividend * 100).toFixed(2) : 0; 
+                            return ` ${label}: $${value.toFixed(2)} (${percentage}%)`; 
+                        } 
+                    }} 
                 } 
             }
         });
@@ -199,11 +215,10 @@ document.addEventListener('DOMContentLoaded', function () {
         
         closeButton.addEventListener('click', () => {
              monthlyDetailContainer.classList.add('d-none');
-             // 차트 강조 효과 초기화
              const chart = Chart.getChart("monthlyDividendChart");
              if (chart) {
                 const dataset = chart.data.datasets[0];
-                dataset.backgroundColor = 'rgba(25, 135, 84, 0.6)'; // 원래 색으로 복원
+                dataset.backgroundColor = 'rgba(25, 135, 84, 0.6)';
                 chart.update();
              }
         }, { once: true });
