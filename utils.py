@@ -68,7 +68,7 @@ def get_projected_dividend_schedule(symbol):
     실제 공시된 배당과 통합하여 반환합니다. 월별 중복 배당 문제를 해결했습니다.
     """
     upper_symbol = symbol.upper()
-    cache_key = f"projected_dividend_schedule_v3:{upper_symbol}" # 캐시 키 버전 업데이트
+    cache_key = f"projected_dividend_schedule_v4:{upper_symbol}" # 캐시 키 버전 업데이트
     
     cached_data = get_from_redis_cache(cache_key)
     if cached_data:
@@ -78,44 +78,44 @@ def get_projected_dividend_schedule(symbol):
     historical_payouts = historical_data.get('payouts', [])
     
     if not historical_payouts:
-        return {'payouts': [], 'months': []}
+        return {'payouts': [], 'months': [], 'payout_count_last_12m': 0}
 
     current_year = datetime.now().year
+    one_year_ago = datetime.now() - timedelta(days=365)
     
     actual_payouts = {
         (datetime.strptime(p['pay_date'], '%Y-%m-%d').month, datetime.strptime(p['pay_date'], '%Y-%m-%d').day): {**p, 'is_estimated': False}
         for p in historical_payouts if p.get('pay_date') and datetime.strptime(p['pay_date'], '%Y-%m-%d').year == current_year
     }
 
-    # 🛠️ 개선: 월별로 가장 최근의 배당 기록만 사용하여 패턴 분석
+    # 🛠️ 개선: 월별로 가장 최근의 배당 기록만 사용하여 패턴 분석 (SCHD 중복 오류 해결)
     monthly_pattern = {}
     historical_payouts.sort(key=lambda p: p['pay_date'], reverse=True)
     for p in historical_payouts:
         pay_dt = datetime.strptime(p['pay_date'], '%Y-%m-%d')
-        ex_dt = datetime.strptime(p['ex_date'], '%Y-%m-%d')
-        if pay_dt.month not in monthly_pattern:
-            monthly_pattern[pay_dt.month] = {
-                'pay_day': pay_dt.day,
-                'ex_day': ex_dt.day,
-                'amount': p['amount']
-            }
+        if p.get('ex_date'):
+            ex_dt = datetime.strptime(p['ex_date'], '%Y-%m-%d')
+            if pay_dt.month not in monthly_pattern:
+                monthly_pattern[pay_dt.month] = {
+                    'pay_day': pay_dt.day,
+                    'ex_day': ex_dt.day,
+                    'amount': p['amount']
+                }
     
     final_payouts = list(actual_payouts.values())
-    processed_months = set(actual_payouts.keys())
+    processed_months = set(p[0] for p in actual_payouts.keys())
 
     for month, data in monthly_pattern.items():
-        pay_day = data['pay_day']
-        
-        if (month, pay_day) in processed_months:
+        if month in processed_months:
             continue
         
+        pay_day = data['pay_day']
         ex_day = data['ex_day']
         amount = data['amount']
         
         try:
-            pay_date_obj = datetime(current_year, month, pay_day)
             ex_date_month = month if pay_day > ex_day else (month - 1 if month > 1 else 12)
-            ex_date_year = current_year if ex_date_month <= month else current_year - 1
+            ex_date_year = current_year if ex_date_month <= month else current_year -1
             projected_ex_date = datetime(ex_date_year, ex_date_month, ex_day).strftime('%Y-%m-%d')
         except ValueError:
             projected_ex_date = datetime(current_year, month, 1).strftime('%Y-%m-%d')
@@ -129,11 +129,17 @@ def get_projected_dividend_schedule(symbol):
 
     final_payouts.sort(key=lambda p: p['pay_date'])
     
+    # 🛠️ 기능 추가: 월배당 판단을 위해 지난 1년간의 실제 배당 횟수 계산
+    payout_count_last_12m = len(set(
+        datetime.strptime(p['pay_date'], '%Y-%m-%d').strftime('%Y-%m')
+        for p in historical_payouts if datetime.strptime(p['pay_date'], '%Y-%m-%d') > one_year_ago
+    ))
+    
     payout_months_num = sorted(list(set(datetime.strptime(p['pay_date'], '%Y-%m-%d').month for p in final_payouts)))
     MONTH_MAP = {1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'}
     month_names = [MONTH_MAP[m] for m in payout_months_num]
 
-    result = {'payouts': final_payouts, 'months': month_names}
+    result = {'payouts': final_payouts, 'months': month_names, 'payout_count_last_12m': payout_count_last_12m}
     set_to_redis_cache(cache_key, result, ttl_hours=6)
     return result
 
@@ -148,7 +154,7 @@ def get_dividend_payout_schedule(symbol):
 
     if not POLYGON_API_KEY:
         logger.warning("Polygon.io API 키가 없어 배당 정보를 조회할 수 없습니다.")
-        return {'payouts': [], 'months': []}
+        return {'payouts': []}
 
     payouts = []
     
@@ -178,11 +184,10 @@ def get_dividend_payout_schedule(symbol):
     except Exception as e:
         logger.warning(f"({upper_symbol}) Polygon.io 배당 지급 일정 조회 실패: {e}")
 
-    result = {'payouts': payouts, 'months': []}
+    result = {'payouts': payouts}
     set_to_redis_cache(cache_key, result, ttl_hours=6)
     return result
 
 
 def get_dividend_allocation_data(dividend_metrics):
-    # 🛠️ 변경: 정렬된 dict.items()가 아닌 dict 자체를 받도록 수정
     return [{'symbol': s, 'value': m['expected_annual_dividend']} for s, m in dividend_metrics.items() if m.get('expected_annual_dividend', 0) > 0]
