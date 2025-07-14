@@ -64,11 +64,11 @@ def calculate_dividend_metrics(holdings, price_data_map):
 
 def get_projected_dividend_schedule(symbol):
     """
-    [로직 전면 개편] 과거 배당 이력(최대 5년)을 분석하여 현재 연도의 미래 배당을 예측하고,
-    실제 공시된 배당과 통합하여 반환합니다. 월배당 및 특별배당 패턴을 자동으로 처리합니다.
+    [로직 전면 개편] 과거 배당 이력을 분석하여 현재 연도의 미래 배당을 예측하고,
+    실제 공시된 배당과 통합하여 반환합니다. 월별 중복 배당 문제를 해결했습니다.
     """
     upper_symbol = symbol.upper()
-    cache_key = f"projected_dividend_schedule_v2:{upper_symbol}"
+    cache_key = f"projected_dividend_schedule_v3:{upper_symbol}" # 캐시 키 버전 업데이트
     
     cached_data = get_from_redis_cache(cache_key)
     if cached_data:
@@ -87,43 +87,45 @@ def get_projected_dividend_schedule(symbol):
         for p in historical_payouts if p.get('pay_date') and datetime.strptime(p['pay_date'], '%Y-%m-%d').year == current_year
     }
 
-    monthly_pattern = defaultdict(lambda: {'pay_days': [], 'ex_days': [], 'amounts': []})
+    # 🛠️ 개선: 월별로 가장 최근의 배당 기록만 사용하여 패턴 분석
+    monthly_pattern = {}
+    historical_payouts.sort(key=lambda p: p['pay_date'], reverse=True)
     for p in historical_payouts:
-        if p.get('pay_date') and p.get('ex_date'):
-            pay_dt = datetime.strptime(p['pay_date'], '%Y-%m-%d')
-            ex_dt = datetime.strptime(p['ex_date'], '%Y-%m-%d')
-            monthly_pattern[pay_dt.month]['pay_days'].append(pay_dt.day)
-            monthly_pattern[pay_dt.month]['ex_days'].append(ex_dt.day)
-            monthly_pattern[pay_dt.month]['amounts'].append(p['amount'])
-
-    final_payouts = list(actual_payouts.values())
+        pay_dt = datetime.strptime(p['pay_date'], '%Y-%m-%d')
+        ex_dt = datetime.strptime(p['ex_date'], '%Y-%m-%d')
+        if pay_dt.month not in monthly_pattern:
+            monthly_pattern[pay_dt.month] = {
+                'pay_day': pay_dt.day,
+                'ex_day': ex_dt.day,
+                'amount': p['amount']
+            }
     
+    final_payouts = list(actual_payouts.values())
+    processed_months = set(actual_payouts.keys())
+
     for month, data in monthly_pattern.items():
-        avg_pay_day = int(sum(data['pay_days']) / len(data['pay_days']))
+        pay_day = data['pay_day']
         
-        if (month, avg_pay_day) in actual_payouts:
+        if (month, pay_day) in processed_months:
             continue
-            
-        avg_ex_day = int(sum(data['ex_days']) / len(data['ex_days']))
-        avg_amount = sum(data['amounts']) / len(data['amounts'])
+        
+        ex_day = data['ex_day']
+        amount = data['amount']
         
         try:
-            # 🛠️ 버그 수정: avg_pay_ay를 avg_pay_day로 수정
-            pay_date_obj = datetime(current_year, month, avg_pay_day)
-            est_ex_date_month = month - 1 if month > 1 else 12
-            est_ex_date_year = current_year if month > 1 else current_year -1
-            projected_ex_date = datetime(est_ex_date_year, est_ex_date_month, avg_ex_day).strftime('%Y-%m-%d')
+            pay_date_obj = datetime(current_year, month, pay_day)
+            ex_date_month = month if pay_day > ex_day else (month - 1 if month > 1 else 12)
+            ex_date_year = current_year if ex_date_month <= month else current_year - 1
+            projected_ex_date = datetime(ex_date_year, ex_date_month, ex_day).strftime('%Y-%m-%d')
         except ValueError:
             projected_ex_date = datetime(current_year, month, 1).strftime('%Y-%m-%d')
 
-
         final_payouts.append({
-            'pay_date': datetime(current_year, month, avg_pay_day).strftime('%Y-%m-%d'),
+            'pay_date': datetime(current_year, month, pay_day).strftime('%Y-%m-%d'),
             'ex_date': projected_ex_date,
-            'amount': avg_amount,
+            'amount': amount,
             'is_estimated': True
         })
-
 
     final_payouts.sort(key=lambda p: p['pay_date'])
     
@@ -137,9 +139,6 @@ def get_projected_dividend_schedule(symbol):
 
 
 def get_dividend_payout_schedule(symbol):
-    """
-    Polygon.io API를 사용하여 과거 배당 정보를 조회합니다. (최대 5년치)
-    """
     upper_symbol = symbol.upper()
     cache_key = f"polygon_dividend_schedule:{upper_symbol}"
     
@@ -185,4 +184,5 @@ def get_dividend_payout_schedule(symbol):
 
 
 def get_dividend_allocation_data(dividend_metrics):
+    # 🛠️ 변경: 정렬된 dict.items()가 아닌 dict 자체를 받도록 수정
     return [{'symbol': s, 'value': m['expected_annual_dividend']} for s, m in dividend_metrics.items() if m.get('expected_annual_dividend', 0) > 0]
