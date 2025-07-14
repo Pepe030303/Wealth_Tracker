@@ -12,6 +12,7 @@ function renderMonthlyDividendChart(canvasId, chartData, isClickable = false) {
         return;
     }
 
+    // 🛠️ UX 개선: 차트 클릭 강조를 위한 변수 설정
     let activeIndex = -1;
     const defaultColor = 'rgba(25, 135, 84, 0.6)';
     const activeColor = 'rgba(25, 135, 84, 1)';
@@ -35,6 +36,10 @@ function renderMonthlyDividendChart(canvasId, chartData, isClickable = false) {
         scales: {
             x: { grid: { display: false } },
             y: { display: false, beginAtZero: true }
+        },
+        // 🛠️ UX 개선: 막대 클릭 시 강조 효과를 위한 애니메이션 비활성화
+        animation: {
+            duration: 0 // 색상 변경 시 애니메이션 효과 제거
         }
     };
     
@@ -47,7 +52,8 @@ function renderMonthlyDividendChart(canvasId, chartData, isClickable = false) {
                 // 이미 활성화된 막대를 다시 클릭하면 초기화
                 if (activeIndex === clickedIndex) {
                     activeIndex = -1;
-                    document.getElementById('closeMonthlyDetail')?.click(); // 상세 뷰 닫기
+                    // 상세 뷰를 닫는 이벤트를 트리거 (dividends.html에 의존)
+                    document.getElementById('closeMonthlyDetail')?.click(); 
                 } else {
                     activeIndex = clickedIndex;
                     if (window.renderMonthlyDetails) {
@@ -106,7 +112,7 @@ function renderSectorAllocationChart(canvasId, chartData) {
                     formatter(context) {
                         if (context.raw) {
                             const item = context.raw;
-                            const percentage = (item.v / totalPortfolioValue * 100).toFixed(1);
+                            const percentage = totalPortfolioValue > 0 ? (item.v / totalPortfolioValue * 100).toFixed(1) : 0;
                             return [item.g, `$${item.v.toFixed(0)}`, `(${percentage}%)`];
                         }
                         return null;
@@ -134,7 +140,7 @@ function renderSectorAllocationChart(canvasId, chartData) {
                             const holdings = item._data.holdings || [];
                             let holdingsText = ['\nHoldings:'];
                             holdings.forEach(h => {
-                                const percentage = (h.value / item.v * 100).toFixed(1);
+                                const percentage = item.v > 0 ? (h.value / item.v * 100).toFixed(1) : 0;
                                 holdingsText.push(`  ${h.symbol}: $${h.value.toFixed(2)} (${percentage}%)`);
                             });
                             return holdingsText;
