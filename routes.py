@@ -15,7 +15,6 @@ import logging
 logger = logging.getLogger(__name__)
 main_bp = Blueprint('main', __name__)
 
-# ... (login, logout, signup 등 인증 관련 라우트는 변경 없음) ...
 @main_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated: return redirect(url_for('main.dashboard'))
@@ -54,10 +53,25 @@ def signup():
 def dashboard():
     portfolio_data = get_portfolio_analysis_data(current_user.id)
     if not portfolio_data:
-        return render_template('dashboard.html', summary={}, sector_allocation=[], monthly_dividend_data={})
+        return render_template('dashboard.html', summary={}, holdings_summary=[], monthly_dividend_data={})
+
+    # 🛠️ 기능 추가: 대시보드용 보유 종목 요약 데이터 생성
+    holdings_summary = []
+    sorted_holdings_by_value = sorted(portfolio_data.get('holdings', []), key=lambda h: h.quantity * (stock_api.get_stock_price(h.symbol) or {}).get('price', 0), reverse=True)
+
+    for h in sorted_holdings_by_value[:5]: # 상위 5개만 표시
+        price_data = stock_api.get_stock_price(h.symbol)
+        current_price = price_data.get('price', 0) if price_data else 0
+        holdings_summary.append({
+            'symbol': h.symbol,
+            'quantity': h.quantity,
+            'current_value': h.quantity * current_price,
+            'profile': stock_api.get_stock_profile(h.symbol)
+        })
+
     return render_template('dashboard.html', 
                            summary=portfolio_data['summary'], 
-                           sector_allocation=portfolio_data['sector_allocation'], 
+                           holdings_summary=holdings_summary, 
                            monthly_dividend_data=portfolio_data['monthly_dividend_data'])
 
 @main_bp.route('/dividends')
@@ -67,14 +81,13 @@ def dividends():
     if not portfolio_data:
         return render_template('dividends.html', dividend_metrics={}, allocation_data=[], monthly_dividend_data={})
     
-    # 🛠️ 템플릿에 전달할 데이터 구조를 명확하게 분리
-    dividend_metrics = portfolio_data['dividend_metrics']
-    allocation_data = get_dividend_allocation_data(dividend_metrics)
+    dividend_metrics_dict = {item[0]: item[1] for item in portfolio_data['dividend_metrics']}
+    allocation_data = get_dividend_allocation_data(dividend_metrics_dict)
     monthly_dividend_data = portfolio_data['monthly_dividend_data']
-    total_annual_dividend = sum(m.get('expected_annual_dividend', 0) for m in dividend_metrics.values())
+    total_annual_dividend = sum(m.get('expected_annual_dividend', 0) for m in dividend_metrics_dict.values())
 
     return render_template('dividends.html',
-                           dividend_metrics=dividend_metrics,
+                           dividend_metrics=portfolio_data['dividend_metrics'],
                            allocation_data=allocation_data,
                            monthly_dividend_data=monthly_dividend_data,
                            total_annual_dividend=total_annual_dividend)
@@ -86,8 +99,8 @@ def holdings():
     if not holdings: return render_template('holdings.html', holdings_data=[])
     
     symbols = {h.symbol for h in holdings}
-    price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
-    profile_data_map = {s: stock_api.get_stock_profile(s) for s in symbols}
+    price_data_map = stock_api.get_stock_prices_bulk(symbols)
+    profile_data_map = stock_api.get_stock_profiles_bulk(symbols)
     
     holdings_data = []
     for h in holdings:
@@ -108,9 +121,12 @@ def holdings():
             'profit_loss': profit_loss,
             'profit_loss_percent': profit_loss_percent,
         })
+    
+    # 🛠️ 기능 개선: 평가금액(current_value) 기준으로 내림차순 정렬
+    holdings_data.sort(key=lambda x: x['current_value'], reverse=True)
+
     return render_template('holdings.html', holdings_data=holdings_data)
 
-# ... (trades, etc. routes are unchanged) ...
 @main_bp.route('/trades')
 @login_required
 def trades():
@@ -198,3 +214,4 @@ def stock_detail(symbol):
                            profile=profile,
                            price_data=price_data,
                            price_history=price_history)
+

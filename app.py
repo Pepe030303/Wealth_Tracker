@@ -15,7 +15,7 @@ from collections import defaultdict
 logging.basicConfig(level=logging.INFO)
 
 # 🛠️ 버전 업데이트
-APP_VERSION = "v1.5.0" 
+APP_VERSION = "v1.6.0" 
 
 class Base(DeclarativeBase): pass
 db = SQLAlchemy(model_class=Base)
