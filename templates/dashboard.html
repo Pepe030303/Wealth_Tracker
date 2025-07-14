@@ -44,7 +44,6 @@
 <div class="row">
     <div class="col-lg-7 mb-4">
         <div class="card h-100">
-            {# 🛠️ 기능 추가: 대시보드에 월별 배당금 차트 추가 #}
             <div class="card-header"><h5 class="card-title mb-0">월별 배당금 현황</h5></div>
             <div class="card-body">
                 <div class="chart-container" style="height: 300px;">
@@ -79,63 +78,14 @@ document.addEventListener('DOMContentLoaded', function () {
     Chart.register(ChartDataLabels);
 
     const sectorData = {{ sector_allocation|tojson }};
-    const sectorCtx = document.getElementById('sectorAllocationChart')?.getContext('2d');
     const monthlyData = {{ monthly_dividend_data|tojson }};
     
-    // 🛠️ 리팩토링: 공통 함수를 사용하여 대시보드 차트 렌더링 (클릭 비활성화)
-    if (monthlyData) {
-        renderMonthlyDividendChart('monthlyDividendChartDashboard', monthlyData, false);
-    }
-
-
-    if (sectorCtx && sectorData && sectorData.length > 0) {
-        const totalPortfolioValue = sectorData.reduce((sum, sector) => sum + sector.value, 0);
-        new Chart(sectorCtx, {
-            type: 'treemap',
-            data: { 
-                datasets: [{
-                    tree: sectorData, key: 'value', groups: ['sector'], 
-                    labels: {
-                        display: true, color: 'white', font: { size: 16, weight: 'bold' },
-                        textStrokeColor: 'rgba(0,0,0,0.6)', textStrokeWidth: 2,
-                        formatter(context) {
-                            if (context.raw) {
-                                const item = context.raw;
-                                const percentage = (item.v / totalPortfolioValue * 100).toFixed(1);
-                                return [item.g, `$${item.v.toFixed(0)}`, `(${percentage}%)`];
-                            }
-                            return null;
-                        }
-                    },
-                    backgroundColor: (ctx) => {
-                        const colors = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0', '#6f42c1', '#fd7e14'];
-                        if (ctx.type === 'dataset') return 'transparent';
-                        return colors[ctx.dataIndex % colors.length];
-                    }
-                }]
-            },
-            options: {
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        titleFont: { size: 14, weight: 'bold' }, bodyFont: { size: 12 },
-                        callbacks: {
-                            title: function(tooltipItems) { return `${tooltipItems[0].raw.g} | $${tooltipItems[0].raw.v.toFixed(2)}`; },
-                            label: function(context) {
-                                const item = context.raw; const holdings = item._data.holdings || [];
-                                let holdingsText = ['\nHoldings:'];
-                                holdings.forEach(h => {
-                                    const percentage = (h.value / item.v * 100).toFixed(1);
-                                    holdingsText.push(`  ${h.symbol}: $${h.value.toFixed(2)} (${percentage}%)`);
-                                });
-                                return holdingsText;
-                            }
-                        }
-                    }
-                } 
-            }
-        });
-    }
+    // 🛠️ 리팩토링: 공통 함수를 사용하여 대시보드 차트 렌더링
+    // 월별 배당금 차트 (클릭 비활성화)
+    renderMonthlyDividendChart('monthlyDividendChartDashboard', monthlyData, false);
+    
+    // 섹터 비중 차트
+    renderSectorAllocationChart('sectorAllocationChart', sectorData);
 });
 </script>
 {% endblock %}
