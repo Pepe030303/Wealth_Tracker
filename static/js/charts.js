@@ -8,10 +8,14 @@
  */
 function renderMonthlyDividendChart(canvasId, chartData, isClickable = false) {
     const ctx = document.getElementById(canvasId)?.getContext('2d');
-    // 🛠️ 안정성 강화: 컨텍스트나 데이터가 없으면 함수를 조용히 종료
     if (!ctx || !chartData || !chartData.datasets || chartData.datasets.length === 0) {
         return;
     }
+
+    let activeIndex = -1;
+    const defaultColor = 'rgba(25, 135, 84, 0.6)';
+    const activeColor = 'rgba(25, 135, 84, 1)';
+    const inactiveColor = 'rgba(200, 200, 200, 0.5)';
 
     const chartOptions = {
         responsive: true,
@@ -33,14 +37,30 @@ function renderMonthlyDividendChart(canvasId, chartData, isClickable = false) {
             y: { display: false, beginAtZero: true }
         }
     };
-
+    
+    // 🛠️ UX 개선: 클릭 이벤트 로직 추가
     if (isClickable) {
-        chartOptions.onClick = (event, elements) => {
+        chartOptions.onClick = (event, elements, chart) => {
             if (elements.length > 0) {
-                const index = elements[0].index;
-                if (window.renderMonthlyDetails) {
-                    window.renderMonthlyDetails(index);
+                const clickedIndex = elements[0].index;
+                
+                // 이미 활성화된 막대를 다시 클릭하면 초기화
+                if (activeIndex === clickedIndex) {
+                    activeIndex = -1;
+                    document.getElementById('closeMonthlyDetail')?.click(); // 상세 뷰 닫기
+                } else {
+                    activeIndex = clickedIndex;
+                    if (window.renderMonthlyDetails) {
+                        window.renderMonthlyDetails(activeIndex);
+                    }
                 }
+                
+                // 모든 막대의 색상을 동적으로 업데이트
+                const backgroundColors = chart.data.datasets[0].data.map((_, i) => 
+                    activeIndex === -1 ? defaultColor : (i === activeIndex ? activeColor : inactiveColor)
+                );
+                chart.data.datasets[0].backgroundColor = backgroundColors;
+                chart.update();
             }
         };
     }
@@ -52,7 +72,7 @@ function renderMonthlyDividendChart(canvasId, chartData, isClickable = false) {
             datasets: [{
                 label: '월별 배당금',
                 data: chartData.datasets[0].data,
-                backgroundColor: 'rgba(25, 135, 84, 0.6)',
+                backgroundColor: defaultColor,
                 borderColor: 'rgba(25, 135, 84, 1)',
                 borderRadius: 4,
                 borderSkipped: false
@@ -62,14 +82,8 @@ function renderMonthlyDividendChart(canvasId, chartData, isClickable = false) {
     });
 }
 
-/**
- * 섹터 비중 트리맵 차트를 렌더링하는 공통 함수
- * @param {string} canvasId - 차트를 그릴 캔버스 요소의 ID
- * @param {Array} chartData - 섹터 데이터 배열
- */
 function renderSectorAllocationChart(canvasId, chartData) {
     const ctx = document.getElementById(canvasId)?.getContext('2d');
-    // 🛠️ 안정성 강화: 컨텍스트나 데이터가 없으면 함수를 조용히 종료
     if (!ctx || !chartData || chartData.length === 0) {
         return;
     }
