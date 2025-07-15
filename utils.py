@@ -10,14 +10,7 @@ from models import StockPrice
 import requests
 import os
 
-try:
-    from app import conn as redis_conn
-except ImportError:
-    redis_conn = None
-    logging.warning("Redis 연결을 가져오지 못했습니다. 캐싱이 비활성화됩니다.")
-
-logger = logging.getLogger(__name__)
-
+# ... (load_manual_overrides, get_from_redis_cache, set_to_redis_cache, calculate_dividend_metrics, get_adjusted_dividend_history, get_dividend_payout_schedule, get_dividend_allocation_data 함수는 변경 없음) ...
 MANUAL_OVERRIDES = {}
 
 def load_manual_overrides():
@@ -115,10 +108,10 @@ def get_adjusted_dividend_history(symbol):
         return {'status': 'error', 'note': '데이터 보정에 실패했습니다.', 'history': []}
 
 def calculate_5yr_avg_dividend_growth(adjusted_history):
-    # 🛠️ 기능 검증: 계산 방식이 5개년 연간 총 배당금 기준 CAGR임을 주석으로 명시
     """
-    보정된 배당 이력을 바탕으로 5년 연평균 성장률(CAGR)을 계산합니다.
-    CAGR = (마지막 해 배당금 / 시작 해 배당금) ** (1 / 기간) - 1
+    🛠️ Fixed: 5년 연평균 성장률(CAGR)을 정확한 방식으로 재계산합니다.
+    - 최근 5개년치 연간 총 배당금 데이터를 사용합니다.
+    - CAGR = ((마지막 해 배당금 / 첫 해 배당금) ** (1 / 기간(년))) - 1
     """
     if not adjusted_history or len(adjusted_history) < 2:
         return None
@@ -130,15 +123,13 @@ def calculate_5yr_avg_dividend_growth(adjusted_history):
         
         annual_dividends = df.groupby('year')['amount'].sum()
         
-        # 유효한 연간 데이터가 2개 이상 있어야 계산 가능
-        if len(annual_dividends) < 2: return None
-            
+        # 최근 5개년 데이터만 필터링
         end_year = annual_dividends.index.max()
-        start_year = max(annual_dividends.index.min(), end_year - 5)
+        start_year_for_period = end_year - 4 # 5년 기간의 시작 년도
         
-        relevant_years = annual_dividends.loc[start_year:end_year]
-        
-        # 유효 기간 내 데이터가 2개 미만이거나 시작 값이 0이면 계산 불가
+        relevant_years = annual_dividends.loc[annual_dividends.index >= start_year_for_period]
+
+        # 데이터가 2개 미만이거나, 시작 값이 0이면 계산 불가
         if len(relevant_years) < 2 or relevant_years.iloc[0] == 0:
             return None
             
@@ -184,4 +175,4 @@ def get_dividend_payout_schedule(symbol):
     return result
 
 def get_dividend_allocation_data(dividend_metrics):
-    return [{'symbol': s, 'value': m['expected_annual_dividend']} for s, m in dividend_metrics.items() if m.get('expected_annual_dividend', 0) > 0]
+    return [{'symbol': item[0], 'value': item[1]['expected_annual_dividend']} for item in dividend_metrics if item[1].get('expected_annual_dividend', 0) > 0]
