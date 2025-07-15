@@ -16,7 +16,6 @@
 </div>
 
 {% if dividend_metrics %}
-{# 🛠️ UI 개선: 월별 요약 컴포넌트를 페이지 상단으로 이동 #}
 <div class="row mb-4">
     <div class="col-lg-8">
         <div class="card h-100">
@@ -48,12 +47,10 @@
     </div>
 </div>
 
-{# 🛠️ UI 개선: 종목별 리스트는 하단으로 이동 #}
 <div class="card">
     <div class="card-header"><h5 class="card-title mb-0">종목별 연간 배당금 (배당금 순 정렬)</h5></div>
     <div class="card-body">
         <div class="row g-3">
-            {# 🛠️ UI 개선: 정렬된 리스트를 루프로 처리 #}
             {% for symbol, metrics in dividend_metrics %}
             <div class="col-12 col-md-6 col-lg-4">
                 <div class="card h-100">
@@ -72,9 +69,7 @@
                         </div>
                         <div class="d-flex justify-content-between text-center border-top border-bottom py-2 mb-2">
                              <div>
-                                {# 🛠️ UI 개선: 주식 수를 정수로 표기 #}
                                 <small class="text-muted d-block">{{ metrics.quantity|round|int }}주 보유</small>
-                                {# 🛠️ UI 개선: 주당 배당금을 소수점 둘째자리로 표기 #}
                                 <small class="text-muted">@ ${{ "%.2f"|format(metrics.dividend_per_share) }}/주</small>
                             </div>
                              <div>
@@ -92,7 +87,6 @@
                             </div>
                         </div>
                         <div class="text-center">
-                            {# 🛠️ UI 개선: 월배당 종목 요약 표시 ('(12회)' 제거) #}
                             {% if metrics.payout_months and metrics.payout_months|length >= 12 %}
                                 <span class="badge bg-primary-subtle text-primary-emphasis">월배당</span>
                             {% else %}
@@ -131,7 +125,6 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    // ... (JavaScript 로직은 이전과 거의 동일, 데이터 소스만 변경됨)
     const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.map(function (tooltipTriggerEl) { return new bootstrap.Tooltip(tooltipTriggerEl); });
     
@@ -142,7 +135,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const taxToggleLabel = document.getElementById('taxToggleLabel');
     
     let allocationChart, monthlyChart;
-    const originalAllocationData = {{ get_dividend_allocation_data(dividend_metrics)|tojson }};
+    
+    // 🛠️ 버그 수정: 템플릿 내 함수 호출 대신, 라우트에서 전달된 변수를 직접 사용합니다.
+    const originalAllocationData = {{ allocation_data|tojson }};
     const originalMonthlyData = {{ monthly_dividend_data|tojson }};
     const originalDetailedData = originalMonthlyData.detailed_data || {};
 
