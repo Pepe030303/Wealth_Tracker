@@ -5,11 +5,9 @@ from datetime import datetime
 from sqlalchemy import func
 from app import db, task_queue
 from tasks import update_all_dividends_for_user
-# 🛠️ Refactoring: `recalculate_holdings`를 `models`에서 임포트하던 것을 제거
 from models import User, Holding, Dividend, Trade
 from utils import get_dividend_allocation_data
 from stock_api import stock_api, US_STOCKS_LIST
-# 🛠️ Refactoring: 서비스 계층에서 필요한 모든 함수를 임포트
 from services.portfolio_service import (
     get_portfolio_analysis_data,
     get_processed_holdings_data,
@@ -70,13 +68,16 @@ def dashboard():
 @login_required
 def dividends():
     portfolio_data = get_portfolio_analysis_data(current_user.id)
-    if not portfolio_data:
-        return render_template('dividends.html', dividend_metrics={}, allocation_data=[], monthly_dividend_data={})
+    if not portfolio_data or not portfolio_data.get('dividend_metrics'):
+        return render_template('dividends.html', dividend_metrics=[], allocation_data=[], monthly_dividend_data={}, total_annual_dividend=0)
     
-    dividend_metrics = portfolio_data['dividend_metrics']
+    dividend_metrics = portfolio_data['dividend_metrics'] # This is now a list of tuples
     allocation_data = get_dividend_allocation_data(dividend_metrics)
     monthly_dividend_data = portfolio_data['monthly_dividend_data']
-    total_annual_dividend = sum(m.get('expected_annual_dividend', 0) for m in dividend_metrics.values())
+    
+    # 🛠️ 버그 수정: dividend_metrics가 딕셔너리가 아닌 튜플 리스트이므로, 순회 방식을 변경합니다.
+    # 각 item은 ('SYMBOL', {metrics_dict}) 형태의 튜플입니다.
+    total_annual_dividend = sum(item[1].get('expected_annual_dividend', 0) for item in dividend_metrics)
 
     return render_template('dividends.html',
                            dividend_metrics=dividend_metrics,
@@ -87,12 +88,9 @@ def dividends():
 @main_bp.route('/holdings')
 @login_required
 def holdings():
-    # 🛠️ Refactoring: 복잡한 데이터 처리 로직을 서비스 함수 호출로 대체
-    # 라우트는 이제 데이터 가공의 책임 없이, 서비스 계층에 작업을 위임하고 결과만 받습니다.
     holdings_data = get_processed_holdings_data(current_user.id)
     return render_template('holdings.html', holdings_data=holdings_data)
 
-# ... (trades, etc. routes are unchanged) ...
 @main_bp.route('/trades')
 @login_required
 def trades():
@@ -114,7 +112,6 @@ def add_trade():
                 return redirect(url_for('main.trades'))
         trade = Trade(symbol=symbol, trade_type=trade_type, quantity=quantity, price=price, trade_date=trade_date, user_id=current_user.id)
         db.session.add(trade); db.session.commit()
-        # 🛠️ Refactoring: 서비스 계층에서 임포트된 함수를 호출
         recalculate_holdings(current_user.id)
         flash(f'{symbol} {trade_type.upper()} 거래가 성공적으로 추가되었습니다.', 'success')
     except (ValueError, TypeError) as e:
@@ -128,7 +125,6 @@ def add_trade():
 def delete_trade(trade_id):
     trade = Trade.query.filter_by(id=trade_id, user_id=current_user.id).first_or_404()
     db.session.delete(trade); db.session.commit()
-    # 🛠️ Refactoring: 서비스 계층에서 임포트된 함수를 호출
     recalculate_holdings(current_user.id)
     flash(f'{trade.symbol} 거래가 삭제되었습니다.', 'success')
     return redirect(url_for('main.trades'))
