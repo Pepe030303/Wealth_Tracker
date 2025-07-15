@@ -10,12 +10,8 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_login import LoginManager
 import redis
 from rq import Queue
-from collections import defaultdict
 
 logging.basicConfig(level=logging.INFO)
-
-# 🛠️ 버전 업데이트
-APP_VERSION = "v1.7.0" 
 
 class Base(DeclarativeBase): pass
 db = SQLAlchemy(model_class=Base)
@@ -43,10 +39,6 @@ login_manager.login_view = 'main.login'
 login_manager.login_message = "로그인이 필요한 페이지입니다."
 login_manager.login_message_category = "info"
 
-@app.context_processor
-def inject_version():
-    return dict(app_version=APP_VERSION)
-
 @app.template_filter('strftime')
 def strftime_filter(dt, fmt='%Y-%m-%d'):
     if isinstance(dt, str): return datetime.now().strftime(fmt) if dt == 'now' else dt
@@ -71,6 +63,10 @@ with app.app_context():
     db.create_all()
     from stock_api import load_us_stocks_data
     load_us_stocks_data()
+    # 🛠️ 기능 추가: 앱 시작 시 수동 재정의 데이터 로드
+    from utils import load_manual_overrides
+    load_manual_overrides()
+
 
 from routes import main_bp
 app.register_blueprint(main_bp)
