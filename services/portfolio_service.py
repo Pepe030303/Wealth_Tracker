@@ -1,7 +1,6 @@
 # 📄 services/portfolio_service.py
 
 from stock_api import stock_api
-# 🛠️ 기능 추가: 신규 유틸리티 함수 임포트
 from utils import (
     calculate_dividend_metrics, 
     get_dividend_payout_schedule,
@@ -12,6 +11,7 @@ from models import Holding, Trade
 from app import db
 from datetime import datetime
 
+# ... (recalculate_holdings, get_processed_holdings_data, get_monthly_dividend_distribution 함수는 변경 없음) ...
 def recalculate_holdings(user_id):
     Holding.query.filter_by(user_id=user_id).delete()
     symbols = db.session.query(Trade.symbol).filter_by(user_id=user_id).distinct().all()
@@ -56,7 +56,8 @@ def get_processed_holdings_data(user_id):
 
 def get_monthly_dividend_distribution(dividend_metrics):
     detailed_monthly_data = {i: [] for i in range(12)}
-    for symbol, metrics in dividend_metrics.items():
+    # 🛠️ Fix: 입력이 dict가 아닌 list of tuples일 수 있으므로 처리 방식 변경
+    for symbol, metrics in dividend_metrics:
         dividend_schedule = get_dividend_payout_schedule(symbol)
         payout_schedule = dividend_schedule['payouts']
         if not payout_schedule: continue
@@ -66,6 +67,7 @@ def get_monthly_dividend_distribution(dividend_metrics):
             detailed_monthly_data[month_index].append({'symbol': symbol, 'amount': payout['amount'] * metrics.get('quantity', 0), 'profile': metrics.get('profile', {}), 'quantity': metrics.get('quantity', 0), 'dps_per_payout': payout['amount'], 'ex_dividend_date': payout['date']})
     monthly_totals = [sum(item['amount'] for item in items) for items in detailed_monthly_data.values()]
     return {'labels': [f"{i+1}월" for i in range(12)], 'datasets': [{'data': monthly_totals}], 'detailed_data': detailed_monthly_data}
+
 
 def get_portfolio_analysis_data(user_id):
     holdings = Holding.query.filter_by(user_id=user_id).all()
@@ -87,10 +89,16 @@ def get_portfolio_analysis_data(user_id):
         metrics['quantity'] = quantity
         metrics['current_value'] = current_price * quantity
         
-        # 🛠️ 기능 추가: 액면분할 보정 및 5년 성장률 계산
         adjusted_div_data = get_adjusted_dividend_history(symbol)
         metrics['note'] = adjusted_div_data.get('note')
         metrics['dgr_5y'] = calculate_5yr_avg_dividend_growth(adjusted_div_data.get('history'))
+
+    # 🛠️ 기능 추가: 연간 배당금 기준으로 내림차순 정렬
+    sorted_dividend_metrics = sorted(
+        dividend_metrics.items(),
+        key=lambda item: item[1].get('expected_annual_dividend', 0),
+        reverse=True
+    )
 
     total_investment = sum(h.quantity * h.purchase_price for h in holdings)
     total_current_value = sum(h.quantity * (price_data_map.get(h.symbol, {}).get('price') or h.purchase_price) for h in holdings)
@@ -108,6 +116,7 @@ def get_portfolio_analysis_data(user_id):
     total_profit_loss = total_current_value - total_investment
     summary_data = {'total_investment': total_investment, 'total_current_value': total_current_value, 'total_profit_loss': total_profit_loss, 'total_return_percent': (total_profit_loss / total_investment * 100) if total_investment > 0 else 0}
     
-    monthly_dividend_data = get_monthly_dividend_distribution(dividend_metrics)
+    monthly_dividend_data = get_monthly_dividend_distribution(sorted_dividend_metrics)
     
-    return {"holdings": holdings, "summary": summary_data, "sector_allocation": sector_allocation, "dividend_metrics": dividend_metrics, "monthly_dividend_data": monthly_dividend_data}
+    # 템플릿에 정렬된 리스트를 전달
+    return {"holdings": holdings, "summary": summary_data, "sector_allocation": sector_allocation, "dividend_metrics": sorted_dividend_metrics, "monthly_dividend_data": monthly_dividend_data}
