@@ -40,13 +40,8 @@ class Dividend(db.Model):
     amount = db.Column(db.Float, nullable=False)
     amount_per_share = db.Column(db.Float, nullable=True)
     dividend_date = db.Column(db.Date, nullable=False)  # 지급일 (Pay Date)
-    
-    # [개선] 배당락일 기준 계산을 위해 ex_dividend_date 컬럼 추가
     ex_dividend_date = db.Column(db.Date, nullable=True, index=True) # 배당락일 (Ex-Dividend Date)
-    
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
-
-    # 동일한 사용자의 동일 종목, 동일 배당락일 배당이 중복 저장되지 않도록 제약조건 추가 (선택사항)
     __table_args__ = (db.UniqueConstraint('user_id', 'symbol', 'ex_dividend_date', name='_user_symbol_ex_date_uc'),)
 
 
@@ -63,27 +58,5 @@ class DividendUpdateCache(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, unique=True)
     last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-def recalculate_holdings(user_id):
-    Holding.query.filter_by(user_id=user_id).delete()
-    symbols = db.session.query(Trade.symbol).filter_by(user_id=user_id).distinct().all()
-    for (symbol,) in symbols:
-        trades = Trade.query.filter_by(symbol=symbol, user_id=user_id).order_by(Trade.trade_date, Trade.id).all()
-        buy_queue = []
-        for trade in trades:
-            if trade.trade_type == 'buy':
-                buy_queue.append({'quantity': trade.quantity, 'price': trade.price, 'date': trade.trade_date})
-            elif trade.trade_type == 'sell':
-                sell_quantity = trade.quantity
-                while sell_quantity > 0 and buy_queue:
-                    if buy_queue[0]['quantity'] <= sell_quantity:
-                        sell_quantity -= buy_queue[0]['quantity']; buy_queue.pop(0)
-                    else:
-                        buy_queue[0]['quantity'] -= sell_quantity; sell_quantity = 0
-        final_quantity = sum(b['quantity'] for b in buy_queue)
-        if final_quantity > 0:
-            final_cost = sum(b['quantity'] * b['price'] for b in buy_queue)
-            avg_price = final_cost / final_quantity
-            latest_buy_date = max(b['date'] for b in buy_queue) if buy_queue else None
-            holding = Holding(symbol=symbol, quantity=final_quantity, purchase_price=avg_price, purchase_date=datetime.combine(latest_buy_date, datetime.min.time()) if latest_buy_date else None, user_id=user_id)
-            db.session.add(holding)
-    db.session.commit()
+# 🛠️ Refactoring: `recalculate_holdings` 함수를 비즈니스 로직을 담당하는 `services/portfolio_service.py`로 이동
+# 이제 models.py 파일은 순수하게 데이터 구조 정의에만 집중합니다.
