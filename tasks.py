@@ -4,10 +4,9 @@ import yfinance as yf
 import pandas as pd
 from app import db, app
 from models import Holding, Dividend, DividendUpdateCache, Trade
-# 🛠️ 변경: Finnhub API를 사용하기 위해 유틸리티 함수 임포트
-from utils import get_dividend_payout_schedule
 import logging
 from datetime import datetime, timedelta
+import requests # 🛠️ 예외 처리를 위해 임포트
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -36,8 +35,9 @@ def get_quantity_on_date(user_id, symbol, target_date):
 
 def update_all_dividends_for_user(user_id):
     """
-    [API 교체] yfinance 대신 Finnhub API를 사용하여 배당 내역을 업데이트합니다.
-    '배당락일' 기준 보유 수량을 계산하여 실제 받을 배당금을 'Dividend' 테이블에 기록합니다.
+    [배당락일 로직 개선]
+    사용자의 전체 보유 종목에 대해, '배당락일' 기준 보유 수량을 계산하여
+    실제 받을 배당금을 'Dividend' 테이블에 기록하는 백그라운드 작업.
     """
     with app.app_context():
         try:
@@ -46,7 +46,7 @@ def update_all_dividends_for_user(user_id):
                 logger.info(f"User {user_id}: 6시간 이내에 이미 배당금 업데이트를 시도했습니다. 건너뜁니다.")
                 return
 
-            logger.info(f"User {user_id}: 배당금 내역 업데이트 시작 (Finnhub API 사용).")
+            logger.info(f"User {user_id}: 배당금 내역 업데이트 시작 (배당락일 기준).")
             symbols_traded = db.session.query(Trade.symbol).filter_by(user_id=user_id).distinct().all()
             if not symbols_traded:
                 logger.info(f"User {user_id}: 거래 기록이 없어 배당금 업데이트를 종료합니다.")
@@ -55,31 +55,21 @@ def update_all_dividends_for_user(user_id):
             total_new_dividends = 0
             for (symbol,) in symbols_traded:
                 try:
-                    # 🛠️ 변경: yfinance 대신 Finnhub 데이터 조회 함수 호출
-                    dividend_data = get_dividend_payout_schedule(symbol)
-                    payouts = dividend_data.get('payouts', [])
-                    
-                    if not payouts:
+                    ticker = yf.Ticker(symbol)
+                    actions = ticker.actions
+                    if actions is None or actions.empty or 'Dividends' not in actions.columns:
                         continue
+                    
+                    dividends_data = actions[actions['Dividends'] > 0]
+                    if dividends_data.empty: continue
 
-                    for payout in payouts:
-                        ex_date_str = payout.get('ex_date')
-                        pay_date_str = payout.get('pay_date')
-                        amount_per_share = payout.get('amount')
+                    for ex_dividend_date, row in dividends_data.iterrows():
+                        amount_per_share = row['Dividends']
+                        ex_date_native = ex_dividend_date.date()
                         
-                        if not all([ex_date_str, pay_date_str, amount_per_share]):
-                            continue
-                        
-                        ex_date_native = datetime.strptime(ex_date_str, '%Y-%m-%d').date()
-                        pay_date_native = datetime.strptime(pay_date_str, '%Y-%m-%d').date()
-
-                        # 1. 이 배당락일 기준으로, 사용자가 이 배당을 받을 자격이 있는지 확인
                         quantity_on_ex_date = get_quantity_on_date(user_id, symbol, ex_date_native)
-                        
-                        if quantity_on_ex_date <= 0:
-                            continue
+                        if quantity_on_ex_date <= 0: continue
 
-                        # 2. 이미 DB에 동일한 배당락일의 기록이 있는지 확인 (중복 방지)
                         exists = Dividend.query.filter_by(
                             user_id=user_id, 
                             symbol=symbol, 
@@ -87,22 +77,26 @@ def update_all_dividends_for_user(user_id):
                         ).first()
 
                         if not exists:
-                            # 3. 신규 배당 기록 추가 (정확한 지급일과 배당락일 모두 저장)
                             total_amount = float(amount_per_share) * quantity_on_ex_date
                             new_dividend = Dividend(
                                 symbol=symbol,
                                 amount=total_amount,
                                 amount_per_share=float(amount_per_share),
-                                dividend_date=pay_date_native, # 실제 지급일
-                                ex_dividend_date=ex_date_native, # 실제 배당락일
+                                dividend_date=ex_date_native,
+                                ex_dividend_date=ex_date_native,
                                 user_id=user_id
                             )
                             db.session.add(new_dividend)
                             total_new_dividends += 1
                 
+                # 🛠️ 예외 처리 강화: 네트워크, 데이터 파싱 등 구체적인 예외 처리
+                except requests.exceptions.HTTPError as http_err:
+                    logger.warning(f"배당 정보 조회 실패 (HTTP 오류) (User {user_id}, Symbol {symbol}): {http_err}")
+                except (AttributeError, KeyError, IndexError, TypeError) as e:
+                    logger.warning(f"배당 정보 파싱 오류 (User {user_id}, Symbol {symbol}): {e}")
                 except Exception as e:
-                    logger.error(f"User {user_id}, Symbol {symbol} 처리 중 오류: {e}")
-                    db.session.rollback()
+                    logger.error(f"User {user_id}, Symbol {symbol} 처리 중 예상치 못한 오류: {e}")
+                    db.session.rollback() # 예상치 못한 오류 시에만 롤백
             
             if total_new_dividends > 0:
                 db.session.commit()
@@ -116,7 +110,6 @@ def update_all_dividends_for_user(user_id):
             db.session.commit()
             
             logger.info(f"User {user_id}: 배당금 업데이트 작업 완료.")
-
         except Exception as e:
             logger.error(f"User {user_id}의 전체 배당금 업데이트 작업 실패: {e}")
             db.session.rollback()
