@@ -8,7 +8,7 @@ import json
 from redis import Redis
 from models import StockPrice
 import requests
-import os # 🛠️ os 모듈 임포트
+import os
 
 try:
     from app import conn as redis_conn
@@ -18,11 +18,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# 🛠️ 기능 추가: 수동 재정의 데이터 저장을 위한 전역 변수
 MANUAL_OVERRIDES = {}
 
 def load_manual_overrides():
-    """ 앱 시작 시 manual_overrides.json 파일을 로드합니다. """
     global MANUAL_OVERRIDES
     override_file = 'manual_overrides.json'
     if os.path.exists(override_file):
@@ -30,9 +28,7 @@ def load_manual_overrides():
             with open(override_file, 'r') as f:
                 MANUAL_OVERRIDES = json.load(f)
             logger.info(f"수동 재정의 데이터({override_file}) 로드 완료: {list(MANUAL_OVERRIDES.keys())}")
-        except json.JSONDecodeError as e:
-            logger.error(f"수동 재정의 파일 JSON 파싱 오류: {e}")
-        except Exception as e:
+        except (json.JSONDecodeError, Exception) as e:
             logger.error(f"수동 재정의 파일 로드 중 오류 발생: {e}")
 
 def get_from_redis_cache(key):
@@ -50,7 +46,6 @@ def calculate_dividend_metrics(holdings, price_data_map):
     for h in holdings:
         symbol = h.symbol.upper()
         
-        # 🛠️ 기능 추가: 수동 재정의 데이터 우선 확인
         if symbol in MANUAL_OVERRIDES and 'trailingAnnualDividendRate' in MANUAL_OVERRIDES[symbol]:
             annual_dps = MANUAL_OVERRIDES[symbol]['trailingAnnualDividendRate']
             logger.info(f"({symbol})에 대해 수동 재정의된 배당률 ${annual_dps} 적용.")
@@ -88,12 +83,7 @@ def calculate_dividend_metrics(holdings, price_data_map):
             }
     return dividend_metrics
 
-# 🛠️ 기능 추가: 액면분할을 보정한 배당 이력을 가져오는 함수
 def get_adjusted_dividend_history(symbol):
-    """
-    yfinance에서 배당금과 액면분할 이력을 함께 조회하여,
-    과거 배당금을 현재 주식 수 기준으로 보정한 리스트를 반환합니다.
-    """
     cache_key = f"adjusted_dividend_history:{symbol.upper()}"
     if cached_data := get_from_redis_cache(cache_key):
         return cached_data
@@ -102,10 +92,7 @@ def get_adjusted_dividend_history(symbol):
         actions = yf.Ticker(symbol).actions
         if actions is None or actions.empty:
             return {'status': 'ok', 'history': []}
-
         actions['adj_factor'] = 1.0
-        
-        # 액면분할 정보 처리
         split_dates = actions[actions['Stock Splits'] != 0].index
         for date in reversed(actions.index):
             current_factor = actions.loc[date, 'adj_factor']
@@ -113,59 +100,59 @@ def get_adjusted_dividend_history(symbol):
             if prev_date_index >= 0:
                 prev_date = actions.index[prev_date_index]
                 if date in split_dates:
-                    split_ratio = actions.loc[date, 'Stock Splits']
-                    actions.loc[prev_date, 'adj_factor'] = current_factor * split_ratio
+                    actions.loc[prev_date, 'adj_factor'] = current_factor * actions.loc[date, 'Stock Splits']
                 else:
                     actions.loc[prev_date, 'adj_factor'] = current_factor
-        
         dividends = actions[actions['Dividends'] > 0].copy()
-        if dividends.empty:
-            return {'status': 'ok', 'history': []}
-            
+        if dividends.empty: return {'status': 'ok', 'history': []}
         dividends['adjusted_dps'] = dividends['Dividends'] / dividends['adj_factor']
-        
-        history = [
-            {'date': date.strftime('%Y-%m-%d'), 'amount': row['adjusted_dps']}
-            for date, row in dividends.iterrows()
-        ]
-        
+        history = [{'date': date.strftime('%Y-%m-%d'), 'amount': row['adjusted_dps']} for date, row in dividends.iterrows()]
         result = {'status': 'ok', 'history': history}
         set_to_redis_cache(cache_key, result)
         return result
-
     except Exception as e:
         logger.error(f"액면분할 보정 배당 이력 조회 실패 ({symbol}): {e}")
         return {'status': 'error', 'note': '데이터 보정에 실패했습니다.', 'history': []}
 
-# 🛠️ 기능 추가: 5년 연평균 배당성장률 계산 함수
 def calculate_5yr_avg_dividend_growth(adjusted_history):
-    """ 보정된 배당 이력을 바탕으로 5년 연평균 성장률(CAGR)을 계산합니다. """
-    if not adjusted_history:
+    # 🛠️ 기능 검증: 계산 방식이 5개년 연간 총 배당금 기준 CAGR임을 주석으로 명시
+    """
+    보정된 배당 이력을 바탕으로 5년 연평균 성장률(CAGR)을 계산합니다.
+    CAGR = (마지막 해 배당금 / 시작 해 배당금) ** (1 / 기간) - 1
+    """
+    if not adjusted_history or len(adjusted_history) < 2:
         return None
 
-    df = pd.DataFrame(adjusted_history)
-    df['date'] = pd.to_datetime(df['date'])
-    df['year'] = df['date'].dt.year
-    
-    annual_dividends = df.groupby('year')['amount'].sum()
-    
-    # 최근 6개년 데이터 확보 (5년간의 성장률 계산을 위해)
-    end_year = annual_dividends.index.max()
-    start_year = end_year - 5
-
-    relevant_years = annual_dividends.loc[start_year:end_year]
-    
-    # 유효한 데이터가 2개 미만이면 CAGR 계산 불가
-    if len(relevant_years) < 2 or relevant_years.iloc[0] == 0:
-        return None
+    try:
+        df = pd.DataFrame(adjusted_history)
+        df['date'] = pd.to_datetime(df['date'])
+        df['year'] = df['date'].dt.year
         
-    start_value = relevant_years.iloc[0]
-    end_value = relevant_years.iloc[-1]
-    num_years = len(relevant_years) - 1
+        annual_dividends = df.groupby('year')['amount'].sum()
+        
+        # 유효한 연간 데이터가 2개 이상 있어야 계산 가능
+        if len(annual_dividends) < 2: return None
+            
+        end_year = annual_dividends.index.max()
+        start_year = max(annual_dividends.index.min(), end_year - 5)
+        
+        relevant_years = annual_dividends.loc[start_year:end_year]
+        
+        # 유효 기간 내 데이터가 2개 미만이거나 시작 값이 0이면 계산 불가
+        if len(relevant_years) < 2 or relevant_years.iloc[0] == 0:
+            return None
+            
+        start_value = relevant_years.iloc[0]
+        end_value = relevant_years.iloc[-1]
+        num_years = relevant_years.index[-1] - relevant_years.index[0]
 
-    cagr = ((end_value / start_value) ** (1 / num_years)) - 1
-    return cagr
+        if num_years == 0: return None
 
+        cagr = ((end_value / start_value) ** (1 / num_years)) - 1
+        return cagr
+    except Exception as e:
+        logger.warning(f"DGR 계산 중 오류 발생: {e}")
+        return None
 
 def get_dividend_payout_schedule(symbol):
     upper_symbol = symbol.upper()
