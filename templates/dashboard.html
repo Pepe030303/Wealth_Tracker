@@ -1,7 +1,6 @@
 {# 📄 templates/dashboard.html #}
 
 {% extends "base.html" %}
-{% from 'macros.html' import render_stock_logo with context %}
 {% block title %}대시보드 - Wealth Tracker{% endblock %}
 {% block content %}
 <div class="row">
@@ -47,37 +46,18 @@
         <div class="card h-100">
             <div class="card-header"><h5 class="card-title mb-0">월별 배당금 현황</h5></div>
             <div class="card-body">
+                {# 🛠️ UI 개선: 차트 컨테이너로 감싸서 높이 보장 #}
                 <div class="chart-container" style="height: 300px;">
-                    <canvas id="monthlyDividendChartDashboard"></canvas>
+                    <canvas id="monthlyDividendChart"></canvas>
                 </div>
             </div>
         </div>
     </div>
     <div class="col-lg-5 mb-4">
-        {# 🛠️ UI 변경: 섹터 비중 그래프를 보유 종목 요약 리스트로 교체 #}
         <div class="card h-100">
-            <div class="card-header"><h5 class="card-title mb-0">보유 종목 요약 (Top 5)</h5></div>
-            <div class="card-body p-0">
-                {% if holdings_summary %}
-                <div class="list-group list-group-flush">
-                    {% for item in holdings_summary %}
-                    <div class="list-group-item d-flex justify-content-between align-items-center p-3">
-                        <div class="d-flex align-items-center">
-                            {{ render_stock_logo(item.profile, item.symbol) }}
-                            <div class="ms-3">
-                                <h6 class="mb-0 fw-bold">{{ item.symbol }}</h6>
-                                <small class="text-muted">{{ "%.2f"|format(item.quantity) }} 주</small>
-                            </div>
-                        </div>
-                        <strong class="fs-5">${{ "%.2f"|format(item.current_value) }}</strong>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% else %}
-                <div class="d-flex align-items-center justify-content-center h-100">
-                    <p class="text-muted m-0">보유 종목이 없습니다.</p>
-                </div>
-                {% endif %}
+            <div class="card-header"><h5 class="card-title mb-0">섹터 비중</h5></div>
+            <div class="card-body d-flex align-items-center justify-content-center p-2">
+                {% if sector_allocation %}<canvas id="sectorAllocationChart"></canvas>{% else %}<p class="text-muted m-0">데이터가 없습니다.</p>{% endif %}
             </div>
         </div>
     </div>
@@ -98,10 +78,105 @@
 document.addEventListener('DOMContentLoaded', function () {
     Chart.register(ChartDataLabels);
 
+    const sectorData = {{ sector_allocation|tojson }};
+    const sectorCtx = document.getElementById('sectorAllocationChart')?.getContext('2d');
     const monthlyData = {{ monthly_dividend_data|tojson }};
-    
-    // 월별 배당금 차트 렌더링 (클릭 비활성화)
-    renderMonthlyDividendChart('monthlyDividendChartDashboard', monthlyData, false);
+    const dividendCtx = document.getElementById('monthlyDividendChart')?.getContext('2d');
+
+    if (sectorCtx && sectorData && sectorData.length > 0) {
+        const totalPortfolioValue = sectorData.reduce((sum, sector) => sum + sector.value, 0);
+        new Chart(sectorCtx, {
+            type: 'treemap',
+            data: { 
+                datasets: [{
+                    tree: sectorData, key: 'value', groups: ['sector'], 
+                    labels: {
+                        display: true, color: 'white', font: { size: 16, weight: 'bold' },
+                        textStrokeColor: 'rgba(0,0,0,0.6)', textStrokeWidth: 2,
+                        formatter(context) {
+                            if (context.raw) {
+                                const item = context.raw;
+                                const percentage = (item.v / totalPortfolioValue * 100).toFixed(1);
+                                return [item.g, `$${item.v.toFixed(0)}`, `(${percentage}%)`];
+                            }
+                            return null;
+                        }
+                    },
+                    backgroundColor: (ctx) => {
+                        const colors = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0', '#6f42c1', '#fd7e14'];
+                        if (ctx.type === 'dataset') return 'transparent';
+                        return colors[ctx.dataIndex % colors.length];
+                    }
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        titleFont: { size: 14, weight: 'bold' }, bodyFont: { size: 12 },
+                        callbacks: {
+                            title: function(tooltipItems) { return `${tooltipItems[0].raw.g} | $${tooltipItems[0].raw.v.toFixed(2)}`; },
+                            label: function(context) {
+                                const item = context.raw; const holdings = item._data.holdings || [];
+                                let holdingsText = ['\nHoldings:'];
+                                holdings.forEach(h => {
+                                    const percentage = (h.value / item.v * 100).toFixed(1);
+                                    holdingsText.push(`  ${h.symbol}: $${h.value.toFixed(2)} (${percentage}%)`);
+                                });
+                                return holdingsText;
+                            }
+                        }
+                    }
+                } 
+            }
+        });
+    }
+
+    // 🛠️ Fix: 병합 충돌 코드 제거 및 차트 로직을 '배당금 분석' 페이지와 동일하게 통일
+    if (dividendCtx && monthlyData && monthlyData.datasets && monthlyData.datasets[0].data.length > 0) {
+        // 백엔드 서비스에서 이미 월별 총합을 계산하여 단일 데이터셋으로 전달
+        const monthlyTotals = monthlyData.datasets[0].data;
+
+        new Chart(dividendCtx, {
+            type: 'bar',
+            data: { 
+                labels: monthlyData.labels, 
+                datasets: [{
+                    label: '월별 배당금',
+                    data: monthlyTotals,
+                    backgroundColor: 'rgba(25, 135, 84, 0.6)',
+                    borderColor: 'rgba(25, 135, 84, 1)',
+                    borderWidth: 1,
+                    borderRadius: 8,       // 둥근 막대 스타일
+                    borderSkipped: false,  // 막대 모든 면에 radius 적용
+                }]
+            },
+            options: {
+                responsive: true, 
+                maintainAspectRatio: false,
+                layout: { padding: { top: 30 } }, // 데이터 라벨 잘림 방지
+                plugins: {
+                    legend: { display: false }, // 단일 데이터이므로 범례 불필요
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => `총액: $${context.parsed.y.toFixed(2)}`
+                        }
+                    },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'top',
+                        formatter: (value) => value > 0 ? '$' + value.toFixed(2) : null,
+                        color: '#adb5bd',
+                        font: { weight: 'bold' }
+                    }
+                },
+                scales: { 
+                    x: { grid: { display: false } }, // X축 격자선 제거
+                    y: { display: false, beginAtZero: true } // Y축 제거
+                }
+            }
+        });
+    }
 });
 </script>
 {% endblock %}
