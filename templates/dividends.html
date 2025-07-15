@@ -1,6 +1,4 @@
 {# 📄 templates/dividends.html #}
-
-
 {% extends "base.html" %}
 {% from 'macros.html' import render_stock_logo with context %}
 
@@ -14,35 +12,52 @@
 {% if dividend_metrics %}
 <div class="row">
     <!-- 좌측: 종목별 배당금 리스트 -->
-    <div class="col-lg-6 mb-4">
+    <div class="col-lg-7 mb-4">
         <div class="card h-100">
             <div class="card-header"><h5 class="card-title mb-0">종목별 연간 배당금</h5></div>
             <div class="card-body p-0">
                 <div class="list-group list-group-flush">
-                    {% for symbol, metrics in dividend_metrics %}
+                    {% for symbol, metrics in dividend_metrics.items() %}
                     <div class="list-group-item p-3">
-                        <div class="d-flex align-items-center">
-                            <div class="me-3">
+                        <div class="row g-2 align-items-center">
+                            <div class="col-auto">
                                 {{ render_stock_logo(metrics.profile, symbol) }}
                             </div>
-                            <div class="flex-grow-1">
-                                <h5 class="mb-0 fw-bold">{{ symbol }}</h5>
-                                {# 🛠️ UI 개선: 배당금 텍스트 포맷 변경 #}
-                                <small class="text-muted">{{ metrics.quantity|round(2) }}주 - 1주당 ${{ "%.4f"|format(metrics.dividend_per_share) if metrics.dividend_per_share else 0.0 }}</small>
-                                <div class="d-flex justify-content-between align-items-end mt-1">
-                                    {# 🛠️ UI 개선: 배당월 표시 방식 변경 #}
-                                    <div class="dividend-months d-flex flex-wrap gap-1">
-                                        {% if metrics.payout_count_last_12m >= 12 %}
-                                            <span class="badge bg-info-subtle text-info-emphasis">월배당</span>
-                                        {% else %}
-                                            {% set months_in_korean = metrics.payout_months | korean_dividend_months %}
-                                            {% for month in months_in_korean %}
-                                                <span class="badge bg-secondary-subtle text-secondary-emphasis">{{ month }}</span>
-                                            {% endfor %}
-                                        {% endif %}
-                                    </div>
+                            <div class="col">
+                                <div class="d-flex justify-content-between">
+                                    <h5 class="mb-0 fw-bold">{{ symbol }}</h5>
                                     <strong class="text-success fs-5">${{ "%.2f"|format(metrics.expected_annual_dividend) }}</strong>
                                 </div>
+                                <div>
+                                    <small class="text-muted">{{ metrics.quantity|round(2) }}주 @ ${{ "%.4f"|format(metrics.dividend_per_share) }}/주</small>
+                                    {# 🛠️ 기능 추가: 데이터 보정 오류 시 경고 아이콘 표시 #}
+                                    {% if metrics.note %}
+                                    <i class="fas fa-exclamation-triangle text-warning ms-2" 
+                                       data-bs-toggle="tooltip" 
+                                       data-bs-placement="top"
+                                       title="{{ metrics.note }}"></i>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-end mt-2">
+                            <div>
+                                {% set months_in_korean = metrics.payout_months | korean_dividend_months %}
+                                {% for month in months_in_korean %}
+                                    <span class="badge bg-secondary-subtle text-secondary-emphasis me-1">{{ month }}</span>
+                                {% else %}
+                                    <span class="badge bg-light text-muted">배당월 정보 없음</span>
+                                {% endfor %}
+                            </div>
+                            {# 🛠️ 기능 추가: 5년 연평균 배당성장률 표시 #}
+                            <div>
+                                <small class="text-muted d-block text-end">5년 DGR</small>
+                                {% if metrics.dgr_5y is not none %}
+                                    {% set dgr_class = 'text-success' if metrics.dgr_5y > 0.05 else ('text-danger' if metrics.dgr_5y < 0 else 'text-muted') %}
+                                    <strong class="{{ dgr_class }}">{{ '%+.2f'|format(metrics.dgr_5y * 100) }}%</strong>
+                                {% else %}
+                                    <strong class="text-muted">N/A</strong>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -51,20 +66,14 @@
             </div>
         </div>
     </div>
-    <!-- 우측: 배당 비중 도넛 차트 -->
-    <div class="col-lg-6 mb-4">
-        <div class="card h-100">
+    <!-- 우측: 배당 비중 및 월별 차트 -->
+    <div class="col-lg-5 mb-4">
+        <div class="card mb-4">
             <div class="card-header"><h5 class="card-title mb-0">연간 배당금 비중</h5></div>
-            <div class="card-body d-flex align-items-center justify-content-center p-2">
+            <div class="card-body d-flex align-items-center justify-content-center p-2" style="min-height: 250px;">
                 {% if allocation_data %}<canvas id="dividendAllocationChart"></canvas>{% else %}<p class="text-muted">데이터가 없습니다.</p>{% endif %}
             </div>
         </div>
-    </div>
-</div>
-
-<!-- 하단: 월별 배당금 차트 및 상세 정보 -->
-<div class="row">
-    <div class="col-12">
         <div class="card">
             <div class="card-header">
                 <div class="d-flex justify-content-between align-items-center">
@@ -76,18 +85,22 @@
                 </div>
             </div>
             <div class="card-body">
-                <div class="chart-container" style="height: 250px;">
+                <div class="chart-container" style="height: 200px;">
                     <canvas id="monthlyDividendChart"></canvas>
                 </div>
             </div>
-            <!-- 월별 상세 정보 (클릭 시 표시) -->
-            <div id="monthlyDetail" class="d-none card-footer bg-light-subtle">
-                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 id="monthlyDetailTitle" class="mb-0"></h5>
-                    <button type="button" class="btn-close" id="closeMonthlyDetail" aria-label="Close"></button>
-                </div>
-                <div id="monthlyDetailContent" class="list-group"></div>
+        </div>
+    </div>
+</div>
+<!-- 하단: 월별 상세 정보 -->
+<div class="row">
+    <div class="col-12">
+        <div id="monthlyDetail" class="d-none card card-body bg-light-subtle mt-n3">
+             <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 id="monthlyDetailTitle" class="mb-0"></h5>
+                <button type="button" class="btn-close" id="closeMonthlyDetail" aria-label="Close"></button>
             </div>
+            <div id="monthlyDetailContent" class="list-group"></div>
         </div>
     </div>
 </div>
@@ -103,125 +116,63 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
-    const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
-
+    // 툴팁 활성화
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
     Chart.register(ChartDataLabels);
 
     const allocationData = {{ allocation_data|tojson }};
     const allocationCtx = document.getElementById('dividendAllocationChart')?.getContext('2d');
     const monthlyData = {{ monthly_dividend_data|tojson }};
-    
-    // --- 1. 배당 비중 도넛 차트 ---
+    const monthlyCtx = document.getElementById('monthlyDividendChart')?.getContext('2d');
+
     if (allocationCtx && allocationData && allocationData.length > 0) {
-        // 🛠️ 버그 수정: allocation_data는 dict에서 list로 변경되었으므로 reduce 로직 수정
         const totalDividend = allocationData.reduce((sum, item) => sum + item.value, 0);
         new Chart(allocationCtx, {
             type: 'doughnut',
-            data: { 
-                labels: allocationData.map(i => i.symbol), 
-                datasets: [{ 
-                    data: allocationData.map(i => i.value), 
-                    backgroundColor: ['#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2'], 
-                    borderColor: '#343a40' 
-                }] 
-            },
-            options: { 
-                responsive: true, 
-                maintainAspectRatio: false, 
-                plugins: { 
-                    legend: { position: 'right' }, 
-                    datalabels: { display: false },
-                    tooltip: { callbacks: { 
-                        label: function(context) { 
-                            const label = context.label || ''; 
-                            const value = context.parsed; 
-                            const percentage = totalDividend > 0 ? (value / totalDividend * 100).toFixed(2) : 0; 
-                            return ` ${label}: $${value.toFixed(2)} (${percentage}%)`; 
-                        } 
-                    }} 
-                } 
-            }
+            data: { labels: allocationData.map(i => i.symbol), datasets: [{ data: allocationData.map(i => i.value), backgroundColor: ['#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2'], borderColor: '#343a40' }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' }, datalabels: { display: false }, tooltip: { callbacks: { label: function(context) { const label = context.label || ''; const value = context.parsed; const percentage = (value / totalDividend * 100).toFixed(2); return ` ${label}: $${value.toFixed(2)} (${percentage}%)`; } } } } }
         });
     }
 
-    // --- 2. 월별 배당금 막대 차트 ---
-    if (monthlyData) {
-        renderMonthlyDividendChart('monthlyDividendChart', monthlyData, true);
-    }
-    
-    // --- 3. 월별 상세 정보 렌더링 함수 (전역 스코프에 노출) ---
-    window.renderMonthlyDetails = function(index) {
+    if (monthlyCtx && monthlyData && monthlyData.datasets.length > 0) {
+        const monthlyChart = new Chart(monthlyCtx, {
+            type: 'bar', 
+            data: { labels: monthlyData.labels, datasets: [{ label: '월별 배당금', data: monthlyData.datasets[0].data, backgroundColor: 'rgba(25, 135, 84, 0.6)', borderColor: 'rgba(25, 135, 84, 1)', borderWidth: 1, borderRadius: 8, borderSkipped: false, }] },
+            options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 30 } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (context) => `총액: $${context.parsed.y.toFixed(2)}` } }, datalabels: { anchor: 'end', align: 'top', formatter: (value) => value > 0 ? '$' + value.toFixed(2) : null, color: '#adb5bd', font: { weight: 'bold' } } }, scales: { x: { grid: { display: false } }, y: { display: false, beginAtZero: true } },
+                onClick: (event, elements) => {
+                    if (elements.length > 0) {
+                        renderMonthlyDetails(elements[0].index);
+                    }
+                }
+            }
+        });
         const monthlyDetailContainer = document.getElementById('monthlyDetail');
         const monthlyDetailTitle = document.getElementById('monthlyDetailTitle');
         const monthlyDetailContent = document.getElementById('monthlyDetailContent');
         const closeButton = document.getElementById('closeMonthlyDetail');
         const detailedData = monthlyData.detailed_data;
-
-        const monthName = monthlyData.labels[index];
-        let dataForMonth = detailedData[index] || [];
         
-        if (dataForMonth.length === 0) {
-            monthlyDetailContainer.classList.add('d-none');
-            return;
+        function renderMonthlyDetails(index) {
+            let dataForMonth = detailedData[index] || [];
+            if (dataForMonth.length === 0) { monthlyDetailContainer.classList.add('d-none'); return; }
+            dataForMonth.sort((a, b) => new Date(a.ex_dividend_date) - new Date(b.ex_dividend_date));
+            const totalForMonth = dataForMonth.reduce((sum, item) => sum + item.amount, 0);
+            monthlyDetailTitle.innerHTML = `${monthlyData.labels[index]} 배당 상세 <span class="text-success fw-bold ms-3">$${totalForMonth.toFixed(2)}</span>`;
+            monthlyDetailContent.innerHTML = '';
+            dataForMonth.forEach(item => {
+                const logoUrl = item.profile?.logo_url || `https://via.placeholder.com/32/cccccc/FFFFFF?text=${item.symbol[0]}`;
+                const exDay = new Date(item.ex_dividend_date).getDate();
+                const itemHtml = `<div class="list-group-item d-flex align-items-center p-2 bg-transparent"><span class="badge bg-secondary-subtle text-secondary-emphasis rounded-pill me-3 p-2" style="width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; font-size: 1rem;">${exDay}</span><img src="${logoUrl}" class="stock-logo me-3" alt="${item.symbol} logo" loading="lazy" onerror="this.onerror=null; this.src='https://via.placeholder.com/32/cccccc/FFFFFF?text=${item.symbol[0]}';"><div class="flex-grow-1"><div class="d-flex justify-content-between"><strong class="mb-0">${item.symbol}</strong><strong class="text-success fs-5 ms-3">$${item.amount.toFixed(2)}</strong></div><div class="d-flex justify-content-between"><small class="company-name text-muted">${item.profile?.name || ''}</small><small class="text-muted text-nowrap">${item.quantity.toFixed(2)}주 @ $${item.dps_per_payout.toFixed(4)}</small></div></div></div>`;
+                monthlyDetailContent.innerHTML += itemHtml;
+            });
+            monthlyDetailContainer.classList.remove('d-none');
+            monthlyDetailContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
-
-        dataForMonth.sort((a, b) => new Date(a.pay_date) - new Date(b.pay_date));
-        
-        const totalForMonth = dataForMonth.reduce((sum, item) => sum + item.amount, 0);
-        
-        monthlyDetailTitle.innerHTML = `${monthName} 배당 상세 <span class="text-success fw-bold ms-3">$${totalForMonth.toFixed(2)}</span>`;
-        monthlyDetailContent.innerHTML = '';
-        
-        dataForMonth.forEach(item => {
-            const logoUrl = item.profile?.logo_url || `https://via.placeholder.com/32/cccccc/FFFFFF?text=${item.symbol[0]}`;
-            const payDay = new Date(item.pay_date).getDate();
-            
-            const estimatedIcon = item.is_estimated 
-                ? `<span class="ms-2" data-bs-toggle="tooltip" data-bs-placement="top" title="과거 기록 기반 추정치">
-                     <i class="fas fa-info-circle text-muted"></i>
-                   </span>`
-                : '';
-
-            const itemHtml = `
-            <div class="list-group-item d-flex p-2 bg-transparent">
-                <div class="d-flex flex-column align-items-center me-3" style="width: 3rem;">
-                    <span class="fw-bold fs-5">${payDay}</span>
-                    <small class="text-muted">지급일</small>
-                </div>
-                <img src="${logoUrl}" class="stock-logo align-self-center me-3" alt="${item.symbol} logo" loading="lazy" onerror="this.onerror=null; this.src='https://via.placeholder.com/32/cccccc/FFFFFF?text=${item.symbol[0]}';">
-                <div class="flex-grow-1">
-                    <div class="d-flex justify-content-between">
-                        <div>
-                            <strong class="mb-0">${item.symbol}${estimatedIcon}</strong>
-                            <small class="company-name text-muted d-block">${item.profile?.name || ''}</small>
-                        </div>
-                        <strong class="text-success fs-5 ms-3">$${item.amount.toFixed(2)}</strong>
-                    </div>
-                    <div class="d-flex justify-content-between text-muted small mt-1">
-                       <span>${item.quantity.toFixed(2)}주 @ $${item.dps_per_payout.toFixed(4)}</span>
-                       <span>배당락일: ${item.ex_dividend_date || 'N/A'}</span>
-                    </div>
-                </div>
-            </div>`;
-            monthlyDetailContent.innerHTML += itemHtml;
-        });
-
-        const newTooltipTriggerList = monthlyDetailContent.querySelectorAll('[data-bs-toggle="tooltip"]');
-        [...newTooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
-
-        monthlyDetailContainer.classList.remove('d-none');
-        monthlyDetailContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        
-        closeButton.addEventListener('click', () => {
-             monthlyDetailContainer.classList.add('d-none');
-             const chart = Chart.getChart("monthlyDividendChart");
-             if (chart) {
-                const dataset = chart.data.datasets[0];
-                dataset.backgroundColor = 'rgba(25, 135, 84, 0.6)';
-                chart.update();
-             }
-        }, { once: true });
+        closeButton.addEventListener('click', () => { monthlyDetailContainer.classList.add('d-none'); });
     }
 });
 </script>
