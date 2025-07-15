@@ -10,19 +10,36 @@ from models import StockPrice
 import requests
 import os
 
-# ... (load_manual_overrides, get_from_redis_cache, set_to_redis_cache, calculate_dividend_metrics, get_adjusted_dividend_history, get_dividend_payout_schedule, get_dividend_allocation_data 함수는 변경 없음) ...
+try:
+    from app import conn as redis_conn
+except ImportError:
+    redis_conn = None
+    logging.warning("Redis 연결을 가져오지 못했습니다. 캐싱이 비활성화됩니다.")
+
+# 🛠️ 버그 수정: NameError 방지를 위해 logger 객체를 정의합니다.
+logger = logging.getLogger(__name__)
+
 MANUAL_OVERRIDES = {}
 
 def load_manual_overrides():
+    """ 앱 시작 시 manual_overrides.json 파일을 로드합니다. """
     global MANUAL_OVERRIDES
     override_file = 'manual_overrides.json'
-    if os.path.exists(override_file):
-        try:
-            with open(override_file, 'r') as f:
+    try:
+        # 🛠️ 버그 수정: 파일이 존재하고 내용이 있을 때만 로드를 시도합니다.
+        if os.path.exists(override_file) and os.path.getsize(override_file) > 0:
+            with open(override_file, 'r', encoding='utf-8') as f:
                 MANUAL_OVERRIDES = json.load(f)
             logger.info(f"수동 재정의 데이터({override_file}) 로드 완료: {list(MANUAL_OVERRIDES.keys())}")
-        except (json.JSONDecodeError, Exception) as e:
-            logger.error(f"수동 재정의 파일 로드 중 오류 발생: {e}")
+        else:
+            MANUAL_OVERRIDES = {} # 파일이 없거나 비어있으면 빈 딕셔너리로 초기화
+    except json.JSONDecodeError as e:
+        logger.error(f"수동 재정의 파일 JSON 파싱 오류: {e}")
+        MANUAL_OVERRIDES = {} # 파싱 실패 시에도 안전하게 빈 딕셔너리로 초기화
+    except Exception as e:
+        logger.error(f"수동 재정의 파일 로드 중 예상치 못한 오류 발생: {e}")
+        MANUAL_OVERRIDES = {} # 기타 오류 발생 시에도 안전하게 초기화
+
 
 def get_from_redis_cache(key):
     if not redis_conn: return None
@@ -107,9 +124,10 @@ def get_adjusted_dividend_history(symbol):
         logger.error(f"액면분할 보정 배당 이력 조회 실패 ({symbol}): {e}")
         return {'status': 'error', 'note': '데이터 보정에 실패했습니다.', 'history': []}
 
+
 def calculate_5yr_avg_dividend_growth(adjusted_history):
     """
-    🛠️ Fixed: 5년 연평균 성장률(CAGR)을 정확한 방식으로 재계산합니다.
+    5년 연평균 성장률(CAGR)을 정확한 방식으로 재계산합니다.
     - 최근 5개년치 연간 총 배당금 데이터를 사용합니다.
     - CAGR = ((마지막 해 배당금 / 첫 해 배당금) ** (1 / 기간(년))) - 1
     """
@@ -123,13 +141,13 @@ def calculate_5yr_avg_dividend_growth(adjusted_history):
         
         annual_dividends = df.groupby('year')['amount'].sum()
         
-        # 최근 5개년 데이터만 필터링
+        if len(annual_dividends) < 2: return None
+            
         end_year = annual_dividends.index.max()
-        start_year_for_period = end_year - 4 # 5년 기간의 시작 년도
+        start_year_for_period = end_year - 4 
         
         relevant_years = annual_dividends.loc[annual_dividends.index >= start_year_for_period]
 
-        # 데이터가 2개 미만이거나, 시작 값이 0이면 계산 불가
         if len(relevant_years) < 2 or relevant_years.iloc[0] == 0:
             return None
             
