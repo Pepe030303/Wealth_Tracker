@@ -5,16 +5,23 @@ from datetime import datetime
 from sqlalchemy import func
 from app import db, task_queue
 from tasks import update_all_dividends_for_user
-from models import User, Holding, Dividend, Trade, recalculate_holdings
+# 🛠️ Refactoring: `recalculate_holdings`를 `models`에서 임포트하던 것을 제거
+from models import User, Holding, Dividend, Trade
 from utils import get_dividend_allocation_data
 from stock_api import stock_api, US_STOCKS_LIST
-from services.portfolio_service import get_portfolio_analysis_data
+# 🛠️ Refactoring: 서비스 계층에서 필요한 모든 함수를 임포트
+from services.portfolio_service import (
+    get_portfolio_analysis_data,
+    get_processed_holdings_data,
+    recalculate_holdings
+)
 from flask_login import login_user, logout_user, current_user, login_required
 import logging
 
 logger = logging.getLogger(__name__)
 main_bp = Blueprint('main', __name__)
 
+# ... (login, logout, signup 등 인증 관련 라우트는 변경 없음) ...
 @main_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated: return redirect(url_for('main.dashboard'))
@@ -53,25 +60,10 @@ def signup():
 def dashboard():
     portfolio_data = get_portfolio_analysis_data(current_user.id)
     if not portfolio_data:
-        return render_template('dashboard.html', summary={}, holdings_summary=[], monthly_dividend_data={})
-
-    # 🛠️ 기능 추가: 대시보드용 보유 종목 요약 데이터 생성
-    holdings_summary = []
-    sorted_holdings_by_value = sorted(portfolio_data.get('holdings', []), key=lambda h: h.quantity * (stock_api.get_stock_price(h.symbol) or {}).get('price', 0), reverse=True)
-
-    for h in sorted_holdings_by_value[:5]: # 상위 5개만 표시
-        price_data = stock_api.get_stock_price(h.symbol)
-        current_price = price_data.get('price', 0) if price_data else 0
-        holdings_summary.append({
-            'symbol': h.symbol,
-            'quantity': h.quantity,
-            'current_value': h.quantity * current_price,
-            'profile': stock_api.get_stock_profile(h.symbol)
-        })
-
+        return render_template('dashboard.html', summary={}, sector_allocation=[], monthly_dividend_data={})
     return render_template('dashboard.html', 
                            summary=portfolio_data['summary'], 
-                           holdings_summary=holdings_summary, 
+                           sector_allocation=portfolio_data['sector_allocation'], 
                            monthly_dividend_data=portfolio_data['monthly_dividend_data'])
 
 @main_bp.route('/dividends')
@@ -81,13 +73,13 @@ def dividends():
     if not portfolio_data:
         return render_template('dividends.html', dividend_metrics={}, allocation_data=[], monthly_dividend_data={})
     
-    dividend_metrics_dict = {item[0]: item[1] for item in portfolio_data['dividend_metrics']}
-    allocation_data = get_dividend_allocation_data(dividend_metrics_dict)
+    dividend_metrics = portfolio_data['dividend_metrics']
+    allocation_data = get_dividend_allocation_data(dividend_metrics)
     monthly_dividend_data = portfolio_data['monthly_dividend_data']
-    total_annual_dividend = sum(m.get('expected_annual_dividend', 0) for m in dividend_metrics_dict.values())
+    total_annual_dividend = sum(m.get('expected_annual_dividend', 0) for m in dividend_metrics.values())
 
     return render_template('dividends.html',
-                           dividend_metrics=portfolio_data['dividend_metrics'],
+                           dividend_metrics=dividend_metrics,
                            allocation_data=allocation_data,
                            monthly_dividend_data=monthly_dividend_data,
                            total_annual_dividend=total_annual_dividend)
@@ -95,38 +87,12 @@ def dividends():
 @main_bp.route('/holdings')
 @login_required
 def holdings():
-    holdings = Holding.query.filter_by(user_id=current_user.id).order_by(Holding.symbol).all()
-    if not holdings: return render_template('holdings.html', holdings_data=[])
-    
-    symbols = {h.symbol for h in holdings}
-    price_data_map = stock_api.get_stock_prices_bulk(symbols)
-    profile_data_map = stock_api.get_stock_profiles_bulk(symbols)
-    
-    holdings_data = []
-    for h in holdings:
-        price_data = price_data_map.get(h.symbol)
-        current_price = price_data['price'] if price_data else h.purchase_price
-        
-        total_cost = h.quantity * h.purchase_price
-        current_value = h.quantity * current_price
-        profit_loss = current_value - total_cost
-        profit_loss_percent = (profit_loss / total_cost) * 100 if total_cost > 0 else 0
-
-        holdings_data.append({
-            'holding': h,
-            'profile': profile_data_map.get(h.symbol),
-            'current_price': current_price,
-            'total_cost': total_cost,
-            'current_value': current_value,
-            'profit_loss': profit_loss,
-            'profit_loss_percent': profit_loss_percent,
-        })
-    
-    # 🛠️ 기능 개선: 평가금액(current_value) 기준으로 내림차순 정렬
-    holdings_data.sort(key=lambda x: x['current_value'], reverse=True)
-
+    # 🛠️ Refactoring: 복잡한 데이터 처리 로직을 서비스 함수 호출로 대체
+    # 라우트는 이제 데이터 가공의 책임 없이, 서비스 계층에 작업을 위임하고 결과만 받습니다.
+    holdings_data = get_processed_holdings_data(current_user.id)
     return render_template('holdings.html', holdings_data=holdings_data)
 
+# ... (trades, etc. routes are unchanged) ...
 @main_bp.route('/trades')
 @login_required
 def trades():
@@ -148,6 +114,7 @@ def add_trade():
                 return redirect(url_for('main.trades'))
         trade = Trade(symbol=symbol, trade_type=trade_type, quantity=quantity, price=price, trade_date=trade_date, user_id=current_user.id)
         db.session.add(trade); db.session.commit()
+        # 🛠️ Refactoring: 서비스 계층에서 임포트된 함수를 호출
         recalculate_holdings(current_user.id)
         flash(f'{symbol} {trade_type.upper()} 거래가 성공적으로 추가되었습니다.', 'success')
     except (ValueError, TypeError) as e:
@@ -161,6 +128,7 @@ def add_trade():
 def delete_trade(trade_id):
     trade = Trade.query.filter_by(id=trade_id, user_id=current_user.id).first_or_404()
     db.session.delete(trade); db.session.commit()
+    # 🛠️ Refactoring: 서비스 계층에서 임포트된 함수를 호출
     recalculate_holdings(current_user.id)
     flash(f'{trade.symbol} 거래가 삭제되었습니다.', 'success')
     return redirect(url_for('main.trades'))
@@ -183,7 +151,7 @@ def allocation():
     holdings = Holding.query.filter_by(user_id=current_user.id).all()
     if not holdings: return render_template('allocation.html', allocation_data=[])
     symbols = {h.symbol for h in holdings}
-    price_data_map = {s: stock_api.get_stock_price(s) for s in symbols}
+    price_data_map = stock_api.get_stock_prices_bulk(symbols)
     allocation_data = []
     for h in holdings:
         price_data = price_data_map.get(h.symbol)
@@ -214,4 +182,3 @@ def stock_detail(symbol):
                            profile=profile,
                            price_data=price_data,
                            price_history=price_history)
-
