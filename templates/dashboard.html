@@ -71,13 +71,13 @@
 {% endblock %}
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2.3.0/dist/chartjs-chart-treemap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+{# 🛠️ 버그 수정: datalabels 플러그인은 base.html에서 이미 로드하므로 중복 로드 제거 #}
 <script src="{{ url_for('static', filename='js/charts.js') }}" defer></script>
 
 <script defer>
 document.addEventListener('DOMContentLoaded', function () {
-    // 🛠️ 버그 수정: 차트 생성 전에 필요한 플러그인을 명시적으로 등록.
-    Chart.register(ChartDataLabels);
+    // 🛠️ 버그 수정: 이 페이지에서만 사용하는 treemap 플러그인을 명시적으로 등록
+    Chart.register(ChartJsChartTreemap.TreemapController, ChartJsChartTreemap.TreemapElement);
     
     const sectorData = {{ sector_allocation|tojson }};
     const sectorCtx = document.getElementById('sectorAllocationChart')?.getContext('2d');
@@ -130,6 +130,10 @@ document.addEventListener('DOMContentLoaded', function () {
                                 return holdingsText;
                             }
                         }
+                    },
+                    // datalabels는 base.html에서 전역 등록되었으므로 여기서는 설정만 함
+                    datalabels: {
+                       display: true // treemap에서는 datalabels를 표시
                     }
                 } 
             }
