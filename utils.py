@@ -28,7 +28,6 @@ def load_manual_overrides():
             else:
                 logger.info(f"수동 재정의 파일({override_file})이 비어있어 로드를 건너뜁니다.")
         except json.JSONDecodeError as e:
-            # 오류 메시지를 더 명확하게 수정
             logger.error(f"수동 재정의 파일({override_file}) JSON 파싱 오류: {e}")
         except Exception as e:
             logger.error(f"수동 재정의 파일 로드 중 예상치 못한 오류 발생: {e}")
@@ -43,8 +42,4 @@ def set_to_redis_cache(key, value, ttl_hours=6):
     redis_conn.setex(key, timedelta(hours=ttl_hours), json.dumps(value))
 
 def get_dividend_allocation_data(dividend_metrics):
-    """
-    배당 지표 데이터를 받아 차트 표시에 적합한 형태로 변환하는 유틸리티 함수.
-    (템플릿에서 직접 호출되므로 utils에 유지)
-    """
     return [{'symbol': item[0], 'value': item[1]['expected_annual_dividend']} for item in dividend_metrics if item[1].get('expected_annual_dividend', 0) > 0]
