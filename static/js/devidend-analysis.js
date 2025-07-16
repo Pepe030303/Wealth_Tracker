@@ -2,8 +2,8 @@
 // 🛠️ 신규 파일: dividends.html의 인라인 스크립트를 분리
 
 document.addEventListener('DOMContentLoaded', function () {
-    // 🛠️ 버그 수정: 차트 생성 전에 필요한 플러그인을 명시적으로 등록.
-    Chart.register(ChartDataLabels);
+    // 🛠️ 버그 수정: 플러그인 등록은 base.html에서 전역으로 처리하므로 여기서 제거
+    // Chart.register(ChartDataLabels);
 
     const analysisContainer = document.getElementById('dividendAnalysisContainer');
     if (!analysisContainer) return;

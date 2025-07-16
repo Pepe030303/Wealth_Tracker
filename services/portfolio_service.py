@@ -31,7 +31,7 @@ def recalculate_holdings(user_id):
     db.session.commit()
 
 def get_processed_holdings_data(user_id):
-    holdings = Holding.query.filter_by(user_id=user_id).order_by(Holding.symbol).all()
+    holdings = Holding.query.filter_by(user_id=user_id).all()
     if not holdings: return []
     symbols = {h.symbol for h in holdings}
     price_data_map = stock_api.get_stock_prices_bulk(symbols)
@@ -46,7 +46,6 @@ def get_processed_holdings_data(user_id):
         profit_loss_percent = (profit_loss / total_cost) * 100 if total_cost > 0 else 0
         holdings_data.append({'holding': h, 'profile': profile_data_map.get(h.symbol), 'current_price': current_price, 'total_cost': total_cost, 'current_value': current_value, 'profit_loss': profit_loss, 'profit_loss_percent': profit_loss_percent,})
     
-    # 🛠️ UI 개선: 평가금액(current_value) 기준으로 내림차순 정렬
     holdings_data.sort(key=lambda x: x['current_value'], reverse=True)
     
     return holdings_data
@@ -112,3 +111,27 @@ def get_portfolio_analysis_data(user_id):
     monthly_dividend_data = get_monthly_dividend_distribution(sorted_dividend_metrics)
     
     return {"holdings": holdings, "summary": summary_data, "sector_allocation": sector_allocation, "dividend_metrics": sorted_dividend_metrics, "monthly_dividend_data": monthly_dividend_data}
+
+# 🛠️ 추가: /allocation 페이지를 위한 데이터 제공 함수
+def get_portfolio_allocation_data(user_id):
+    """보유 종목의 자산 배분(비중) 데이터를 계산하여 반환합니다."""
+    holdings = Holding.query.filter_by(user_id=user_id).all()
+    if not holdings:
+        return []
+
+    symbols = {h.symbol for h in holdings}
+    price_data_map = stock_api.get_stock_prices_bulk(symbols)
+    
+    allocation_data = []
+    for h in holdings:
+        price_data = price_data_map.get(h.symbol)
+        current_price = price_data['price'] if price_data else h.purchase_price
+        current_value = h.quantity * current_price
+        allocation_data.append({
+            'symbol': h.symbol,
+            'value': current_value,
+        })
+    
+    # 평가금액 기준으로 내림차순 정렬
+    allocation_data.sort(key=lambda x: x['value'], reverse=True)
+    return allocation_data

@@ -2,7 +2,6 @@
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 from datetime import datetime
 from sqlalchemy import func
-# 🛠️ Refactoring: app 객체를 직접 임포트하여 config 값에 접근
 from app import db, task_queue, app
 from tasks import update_all_dividends_for_user
 from models import User, Holding, Dividend, Trade
@@ -11,11 +10,11 @@ from stock_api import stock_api, US_STOCKS_LIST
 from services.portfolio_service import (
     get_portfolio_analysis_data,
     get_processed_holdings_data,
-    recalculate_holdings
+    recalculate_holdings,
+    get_portfolio_allocation_data # 🛠️ 추가: 자산 배분 데이터 함수 임포트
 )
 from flask_login import login_user, logout_user, current_user, login_required
 import logging
-
 
 logger = logging.getLogger(__name__)
 main_bp = Blueprint('main', __name__)
@@ -71,12 +70,18 @@ def dividends():
     if not portfolio_data:
         return render_template('dividends.html', dividend_metrics=[])
     
-    # 🛠️ Refactoring: 템플릿에 세율(tax_rate) 값을 전달
     return render_template('dividends.html',
                            dividend_metrics=portfolio_data['dividend_metrics'],
                            monthly_dividend_data=portfolio_data['monthly_dividend_data'],
                            get_dividend_allocation_data=get_dividend_allocation_data,
                            tax_rate=app.config.get('TAX_RATE', 0.154))
+
+# 🛠️ 추가: '포트폴리오 비중' 페이지를 위한 라우트 신설
+@main_bp.route('/allocation')
+@login_required
+def allocation():
+    allocation_data = get_portfolio_allocation_data(current_user.id)
+    return render_template('allocation.html', allocation_data=allocation_data)
 
 @main_bp.route('/holdings')
 @login_required
