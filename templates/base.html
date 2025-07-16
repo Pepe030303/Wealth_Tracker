@@ -95,36 +95,65 @@
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    {# 🛠️ 버그 수정: 플러그인 등록 방식을 안정적인 콜백 방식으로 변경 #}
+    {# 🛠️ 버그 수정: 플러그인 로드/등록 방식을 안정적인 콜백 방식으로 변경 #}
     <script>
-        function loadScript(src, callback) {
-            const script = document.createElement('script');
-            script.src = src;
-            script.onload = () => callback();
-            script.onerror = () => console.error(`Failed to load script: ${src}`);
-            document.head.appendChild(script);
-        }
+        (function() {
+            // 네임스페이스를 사용하여 전역 스코프 오염 방지
+            window.ChartUtils = {
+                // 플러그인 로드 상태 및 콜백 큐 관리
+                pluginStatus: {},
+                pluginCallbacks: {},
 
-        // 앱 전역에서 사용할 플러그인들을 로드하고, 로드가 완료되면 Chart.js에 등록
-        window.APP_CHARTS = {
-            arePluginsLoaded: false,
-            onLoadCallbacks: [],
-            loadPlugins: function(callback) {
-                if (this.arePluginsLoaded) {
-                    callback();
-                    return;
-                }
-                this.onLoadCallbacks.push(callback);
-                if (this.onLoadCallbacks.length === 1) { // 첫 호출 시에만 로드 실행
-                    loadScript("https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0", () => {
-                        Chart.register(ChartDataLabels);
-                        this.arePluginsLoaded = true;
-                        this.onLoadCallbacks.forEach(cb => cb());
-                        this.onLoadCallbacks = [];
+                // 스크립트 로딩 함수
+                loadScript: function(id, src) {
+                    // 이미 로딩 중이거나 로드된 스크립트는 다시 로드하지 않음
+                    if (this.pluginStatus[id]) return;
+                    
+                    this.pluginStatus[id] = 'loading';
+                    this.pluginCallbacks[id] = [];
+
+                    const script = document.createElement('script');
+                    script.src = src;
+                    script.onload = () => {
+                        this.pluginStatus[id] = 'loaded';
+                        // 로드가 완료되면 대기 중인 모든 콜백 실행
+                        this.pluginCallbacks[id].forEach(callback => callback());
+                        this.pluginCallbacks[id] = [];
+                    };
+                    script.onerror = () => {
+                        console.error(`Failed to load script: ${src}`);
+                        this.pluginStatus[id] = 'error';
+                    };
+                    document.head.appendChild(script);
+                },
+
+                // 플러그인 로드를 요청하는 인터페이스 함수
+                // 필요한 플러그인 ID 배열과 완료 후 실행할 콜백 함수를 받음
+                requestPlugins: function(pluginIds, onReady) {
+                    const promises = pluginIds.map(id => {
+                        return new Promise((resolve) => {
+                            const status = this.pluginStatus[id];
+                            if (status === 'loaded') {
+                                resolve();
+                            } else if (status === 'loading') {
+                                this.pluginCallbacks[id].push(resolve);
+                            } else {
+                                // 아직 로드 시작도 안한 경우
+                                this.pluginCallbacks[id] = [resolve];
+                                if (id === 'datalabels') {
+                                    this.loadScript(id, "https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0");
+                                } else if (id === 'treemap') {
+                                    this.loadScript(id, "https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2.3.0/dist/chartjs-chart-treemap.min.js");
+                                }
+                            }
+                        });
                     });
+
+                    // 모든 요청된 플러그인이 로드되면 최종 콜백 실행
+                    Promise.all(promises).then(onReady);
                 }
-            }
-        };
+            };
+        })();
     </script>
     
     {% block scripts %}{% endblock %}
