@@ -1,5 +1,4 @@
 # 📄 routes.py
-
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 from datetime import datetime
 from sqlalchemy import func
@@ -19,7 +18,6 @@ import logging
 logger = logging.getLogger(__name__)
 main_bp = Blueprint('main', __name__)
 
-# ... (login, logout, signup 등 인증 관련 라우트는 변경 없음) ...
 @main_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated: return redirect(url_for('main.dashboard'))
@@ -68,22 +66,13 @@ def dashboard():
 @login_required
 def dividends():
     portfolio_data = get_portfolio_analysis_data(current_user.id)
-    if not portfolio_data or not portfolio_data.get('dividend_metrics'):
-        return render_template('dividends.html', dividend_metrics=[], allocation_data=[], monthly_dividend_data={}, total_annual_dividend=0)
+    if not portfolio_data:
+        return render_template('dividends.html', dividend_metrics=[])
     
-    dividend_metrics = portfolio_data['dividend_metrics'] # This is now a list of tuples
-    allocation_data = get_dividend_allocation_data(dividend_metrics)
-    monthly_dividend_data = portfolio_data['monthly_dividend_data']
-    
-    # 🛠️ 버그 수정: dividend_metrics가 딕셔너리가 아닌 튜플 리스트이므로, 순회 방식을 변경합니다.
-    # 각 item은 ('SYMBOL', {metrics_dict}) 형태의 튜플입니다.
-    total_annual_dividend = sum(item[1].get('expected_annual_dividend', 0) for item in dividend_metrics)
-
     return render_template('dividends.html',
-                           dividend_metrics=dividend_metrics,
-                           allocation_data=allocation_data,
-                           monthly_dividend_data=monthly_dividend_data,
-                           total_annual_dividend=total_annual_dividend)
+                           dividend_metrics=portfolio_data['dividend_metrics'],
+                           monthly_dividend_data=portfolio_data['monthly_dividend_data'],
+                           get_dividend_allocation_data=get_dividend_allocation_data)
 
 @main_bp.route('/holdings')
 @login_required
@@ -140,20 +129,6 @@ def dividends_history():
     return render_template('dividends_history.html', 
                            dividends_pagination=dividends_pagination,
                            total_received=total_received)
-
-@main_bp.route('/allocation')
-@login_required
-def allocation():
-    holdings = Holding.query.filter_by(user_id=current_user.id).all()
-    if not holdings: return render_template('allocation.html', allocation_data=[])
-    symbols = {h.symbol for h in holdings}
-    price_data_map = stock_api.get_stock_prices_bulk(symbols)
-    allocation_data = []
-    for h in holdings:
-        price_data = price_data_map.get(h.symbol)
-        if price_data and price_data.get('price') is not None:
-            allocation_data.append({'symbol': h.symbol, 'value': h.quantity * price_data['price']})
-    return render_template('allocation.html', allocation_data=allocation_data)
 
 @main_bp.route('/api/search-stocks')
 @login_required
