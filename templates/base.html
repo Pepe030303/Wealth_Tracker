@@ -49,7 +49,7 @@
                                 <li><a class="dropdown-item" href="{{ url_for('main.dividends_history') }}">배당금 내역</a></li>
                             </ul>
                         </li>
-                        {# 🛠️ 버그 수정: 존재하지 않는 'main.allocation' 엔드포인트 링크 제거 #}
+                        {# 🛠️ Fix: 존재하지 않는 'main.allocation' 엔드포인트 링크가 포함된 주석을 완전히 제거 #}
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fas fa-user me-1"></i>{{ current_user.username }}</a>
                             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
