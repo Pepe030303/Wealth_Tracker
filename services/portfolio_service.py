@@ -11,12 +11,12 @@ from models import Holding, Trade
 from app import db
 from datetime import datetime
 
-# ... (recalculate_holdings, get_processed_holdings_data, get_monthly_dividend_distribution 함수는 변경 없음) ...
+# ... (recalculate_holdings, get_processed_holdings_data 함수는 변경 없음) ...
 def recalculate_holdings(user_id):
     Holding.query.filter_by(user_id=user_id).delete()
     symbols = db.session.query(Trade.symbol).filter_by(user_id=user_id).distinct().all()
     for (symbol,) in symbols:
-        trades = Trade.query.filter_by(symbol=symbol, user_id=user_id).order_by(Trade.trade_date, Trade.id).all()
+        trades = Trade.query.fyilter_by(symbol=symbol, user_id=user_id).order_by(Trade.trade_date, Trade.id).all()
         buy_queue = []
         for trade in trades:
             if trade.trade_type == 'buy':
@@ -56,7 +56,6 @@ def get_processed_holdings_data(user_id):
 
 def get_monthly_dividend_distribution(dividend_metrics):
     detailed_monthly_data = {i: [] for i in range(12)}
-    # 🛠️ Fix: 입력이 dict가 아닌 list of tuples일 수 있으므로 처리 방식 변경
     for symbol, metrics in dividend_metrics:
         dividend_schedule = get_dividend_payout_schedule(symbol)
         payout_schedule = dividend_schedule['payouts']
@@ -80,20 +79,19 @@ def get_portfolio_analysis_data(user_id):
     dividend_metrics = calculate_dividend_metrics(holdings, price_data_map)
     for symbol, metrics in dividend_metrics.items():
         h = next((h for h in holdings if h.symbol == symbol), None)
-        current_price = price_data_map.get(symbol, {}).get('price') or (h.purchase_price if h else 0)
         quantity = h.quantity if h else 0
         
         dividend_schedule = get_dividend_payout_schedule(symbol)
         metrics['payout_months'] = dividend_schedule.get('months', [])
         metrics['profile'] = profile_data_map.get(symbol, {})
         metrics['quantity'] = quantity
-        metrics['current_value'] = current_price * quantity
         
         adjusted_div_data = get_adjusted_dividend_history(symbol)
         metrics['note'] = adjusted_div_data.get('note')
-        metrics['dgr_5y'] = calculate_5yr_avg_dividend_growth(adjusted_div_data.get('history'))
+        # 🛠️ 기능 추가: 종목별 상세 차트를 위해 전체 이력 데이터를 전달
+        metrics['adjusted_history'] = adjusted_div_data.get('history', [])
+        metrics['dgr_5y'] = calculate_5yr_avg_dividend_growth(metrics['adjusted_history'])
 
-    # 🛠️ 기능 추가: 연간 배당금 기준으로 내림차순 정렬
     sorted_dividend_metrics = sorted(
         dividend_metrics.items(),
         key=lambda item: item[1].get('expected_annual_dividend', 0),
@@ -105,8 +103,7 @@ def get_portfolio_analysis_data(user_id):
     
     sector_details = {}
     for h in holdings:
-        profile = profile_data_map.get(h.symbol, {})
-        sector = profile.get('sector', 'N/A')
+        profile = profile_data_map.get(h.symbol, {}); sector = profile.get('sector', 'N/A')
         current_value = h.quantity * (price_data_map.get(h.symbol, {}).get('price') or h.purchase_price)
         if sector not in sector_details: sector_details[sector] = {'total_value': 0, 'holdings': []}
         sector_details[sector]['total_value'] += current_value
@@ -118,5 +115,4 @@ def get_portfolio_analysis_data(user_id):
     
     monthly_dividend_data = get_monthly_dividend_distribution(sorted_dividend_metrics)
     
-    # 템플릿에 정렬된 리스트를 전달
     return {"holdings": holdings, "summary": summary_data, "sector_allocation": sector_allocation, "dividend_metrics": sorted_dividend_metrics, "monthly_dividend_data": monthly_dividend_data}
