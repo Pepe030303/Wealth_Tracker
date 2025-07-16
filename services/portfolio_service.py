@@ -1,6 +1,5 @@
 # 📄 services/portfolio_service.py
 from stock_api import stock_api
-# 🛠️ Refactoring: utils에서 직접 임포트하는 대신, 새로 만든 stock_data_service를 임포트
 from services import stock_data_service
 from models import Holding, Trade
 from app import db
@@ -46,12 +45,15 @@ def get_processed_holdings_data(user_id):
         profit_loss = current_value - total_cost
         profit_loss_percent = (profit_loss / total_cost) * 100 if total_cost > 0 else 0
         holdings_data.append({'holding': h, 'profile': profile_data_map.get(h.symbol), 'current_price': current_price, 'total_cost': total_cost, 'current_value': current_value, 'profit_loss': profit_loss, 'profit_loss_percent': profit_loss_percent,})
+    
+    # 🛠️ UI 개선: 평가금액(current_value) 기준으로 내림차순 정렬
+    holdings_data.sort(key=lambda x: x['current_value'], reverse=True)
+    
     return holdings_data
 
 def get_monthly_dividend_distribution(dividend_metrics):
     detailed_monthly_data = {i: [] for i in range(12)}
     for symbol, metrics in dividend_metrics:
-        # 🛠️ Refactoring: utils 대신 stock_data_service 호출
         dividend_schedule = stock_data_service.get_dividend_payout_schedule(symbol)
         payout_schedule = dividend_schedule['payouts']
         if not payout_schedule: continue
@@ -71,23 +73,19 @@ def get_portfolio_analysis_data(user_id):
     price_data_map = stock_api.get_stock_prices_bulk(symbols)
     profile_data_map = stock_api.get_stock_profiles_bulk(symbols)
     
-    # 🛠️ Refactoring: utils 대신 stock_data_service 호출
     dividend_metrics = stock_data_service.calculate_dividend_metrics(holdings, price_data_map)
     for symbol, metrics in dividend_metrics.items():
         h = next((h for h in holdings if h.symbol == symbol), None)
         quantity = h.quantity if h else 0
         
-        # 🛠️ Refactoring: utils 대신 stock_data_service 호출
         dividend_schedule = stock_data_service.get_dividend_payout_schedule(symbol)
         metrics['payout_months'] = dividend_schedule.get('months', [])
         metrics['profile'] = profile_data_map.get(symbol, {})
         metrics['quantity'] = quantity
         
-        # 🛠️ Refactoring: utils 대신 stock_data_service 호출
         adjusted_div_data = stock_data_service.get_adjusted_dividend_history(symbol)
         metrics['note'] = adjusted_div_data.get('note')
         metrics['adjusted_history'] = adjusted_div_data.get('history', [])
-        # 🛠️ Refactoring: utils 대신 stock_data_service 호출
         metrics['dgr_5y'] = stock_data_service.calculate_5yr_avg_dividend_growth(metrics['adjusted_history'])
 
     sorted_dividend_metrics = sorted(

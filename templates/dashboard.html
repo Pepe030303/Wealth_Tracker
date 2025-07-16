@@ -72,23 +72,22 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2.3.0/dist/chartjs-chart-treemap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
-{# 🛠️ Refactoring: 공통 차트 모듈 로드 #}
 <script src="{{ url_for('static', filename='js/charts.js') }}" defer></script>
 
 <script defer>
 document.addEventListener('DOMContentLoaded', function () {
+    // 🛠️ 버그 수정: 차트 생성 전에 필요한 플러그인을 명시적으로 등록.
+    Chart.register(ChartDataLabels);
+    
     const sectorData = {{ sector_allocation|tojson }};
     const sectorCtx = document.getElementById('sectorAllocationChart')?.getContext('2d');
     const monthlyData = {{ monthly_dividend_data|tojson }};
 
-    // 🛠️ Refactoring: 월별 배당 차트 로직을 공통 함수 호출로 변경
     if (monthlyData) {
         createMonthlyDividendChart('monthlyDividendChart', monthlyData);
     }
     
-    // Treemap chart logic (remains the same)
     if (sectorCtx && sectorData && sectorData.length > 0) {
-        Chart.register(ChartDataLabels);
         const totalPortfolioValue = sectorData.reduce((sum, sector) => sum + sector.value, 0);
         new Chart(sectorCtx, {
             type: 'treemap',
