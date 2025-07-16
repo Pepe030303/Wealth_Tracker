@@ -1,91 +1,76 @@
 # 📄 services/portfolio_service.py
 
 from stock_api import stock_api
-from utils import calculate_dividend_metrics, get_dividend_payout_schedule
-from models import Holding
+from utils import (
+    calculate_dividend_metrics, 
+    get_dividend_payout_schedule,
+    get_adjusted_dividend_history,
+    calculate_5yr_avg_dividend_growth
+)
+from models import Holding, Trade
+from app import db
 from datetime import datetime
 
-def get_monthly_dividend_distribution(dividend_metrics):
-    """
-    [기능 개선] 월별 배당금을 계산할 때, 상세 배당락일 정보를 포함하여 반환.
-    """
-    detailed_monthly_data = {i: [] for i in range(12)}
-    
-    for symbol, metrics in dividend_metrics.items():
+# ... (recalculate_holdings, get_processed_holdings_data 함수는 변경 없음) ...
+def recalculate_holdings(user_id):
+    Holding.query.filter_by(user_id=user_id).delete()
+    symbols = db.session.query(Trade.symbol).filter_by(user_id=user_id).distinct().all()
+    for (symbol,) in symbols:
+        trades = Trade.query.fyilter_by(symbol=symbol, user_id=user_id).order_by(Trade.trade_date, Trade.id).all()
+        buy_queue = []
+        for trade in trades:
+            if trade.trade_type == 'buy':
+                buy_queue.append({'quantity': trade.quantity, 'price': trade.price, 'date': trade.trade_date})
+            elif trade.trade_type == 'sell':
+                sell_quantity = trade.quantity
+                while sell_quantity > 0 and buy_queue:
+                    if buy_queue[0]['quantity'] <= sell_quantity:
+                        sell_quantity -= buy_queue[0]['quantity']; buy_queue.pop(0)
+                    else:
+                        buy_queue[0]['quantity'] -= sell_quantity; sell_quantity = 0
+        final_quantity = sum(b['quantity'] for b in buy_queue)
+        if final_quantity > 0:
+            final_cost = sum(b['quantity'] * b['price'] for b in buy_queue)
+            avg_price = final_cost / final_quantity
+            latest_buy_date = max(b['date'] for b in buy_queue) if buy_queue else None
+            holding = Holding(symbol=symbol, quantity=final_quantity, purchase_price=avg_price, purchase_date=datetime.combine(latest_buy_date, datetime.min.time()) if latest_buy_date else None, user_id=user_id)
+            db.session.add(holding)
+    db.session.commit()
 
-        # 🛠️ Refactoring: 반환된 딕셔너리에서 'payouts' 리스트를 직접 사용
+def get_processed_holdings_data(user_id):
+    holdings = Holding.query.filter_by(user_id=user_id).order_by(Holding.symbol).all()
+    if not holdings: return []
+    symbols = {h.symbol for h in holdings}
+    price_data_map = stock_api.get_stock_prices_bulk(symbols)
+    profile_data_map = stock_api.get_stock_profiles_bulk(symbols)
+    holdings_data = []
+    for h in holdings:
+        price_data = price_data_map.get(h.symbol)
+        current_price = price_data['price'] if price_data else h.purchase_price
+        total_cost = h.quantity * h.purchase_price
+        current_value = h.quantity * current_price
+        profit_loss = current_value - total_cost
+        profit_loss_percent = (profit_loss / total_cost) * 100 if total_cost > 0 else 0
+        holdings_data.append({'holding': h, 'profile': profile_data_map.get(h.symbol), 'current_price': current_price, 'total_cost': total_cost, 'current_value': current_value, 'profit_loss': profit_loss, 'profit_loss_percent': profit_loss_percent,})
+    return holdings_data
+
+def get_monthly_dividend_distribution(dividend_metrics):
+    detailed_monthly_data = {i: [] for i in range(12)}
+    for symbol, metrics in dividend_metrics:
         dividend_schedule = get_dividend_payout_schedule(symbol)
         payout_schedule = dividend_schedule['payouts']
-        
-        if not payout_schedule:
-            continue
-            
+        if not payout_schedule: continue
         for payout in payout_schedule:
             payout_date = datetime.strptime(payout['date'], '%Y-%m-%d')
             month_index = payout_date.month - 1
-            
-            detailed_monthly_data[month_index].append({
-                'symbol': symbol,
-                'amount': payout['amount'] * metrics.get('quantity', 0),
-                'profile': metrics.get('profile', {}),
-                'quantity': metrics.get('quantity', 0),
-                'dps_per_payout': payout['amount'],
-                'ex_dividend_date': payout['date']
-            })
-
-    monthly_totals = [0] * 12
-    for month, items in detailed_monthly_data.items():
-        monthly_totals[month] = sum(item['amount'] for item in items)
-
-    return {
-        'labels': [f"{i+1}월" for i in range(12)],
-        'datasets': [{'data': monthly_totals}],
-        'detailed_data': detailed_monthly_data
-    }
-=======
-        if symbol not in monthly_data_by_symbol: monthly_data_by_symbol[symbol] = [0] * 12
-        dividend_info = get_dividend_months(symbol)
-        payout_months = dividend_info.get("months", [])
-        payout_count = dividend_info.get("count", 0)
-        if payout_months and payout_count > 0 and metrics.get('expected_annual_dividend'):
-            amount_per_payout = metrics['expected_annual_dividend'] / payout_count
-
-            
-            # 🛠️ 개선: 1회 지급 시 주당 배당금 계산
-
-            dps_per_payout = (metrics.get('dividend_per_share', 0) / payout_count) if payout_count > 0 else 0
-            for month_str in payout_months:
-                if month_str in month_map:
-                    month_index = month_map[month_str]
-                    monthly_data_by_symbol[symbol][month_index] += amount_per_payout
-                    # 🛠️ 개선: 상세 데이터에 수량 및 주당 배당금 정보 추가
-                    detailed_monthly_data[month_index].append({
-                        'symbol': symbol, 'amount': amount_per_payout,
-                        'profile': metrics.get('profile', {}),
-                        'quantity': metrics.get('quantity', 0),
-                        'dps_per_payout': dps_per_payout
-                    })
-
-
-    # Chart.js가 요구하는 datasets 형식으로 변환 (스택 차트용 - 대시보드에서 사용)
-
-    datasets = []
-    colors = ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6c757d', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2']
-    color_index = 0
-    for symbol, data in monthly_data_by_symbol.items():
-        datasets.append({'label': symbol, 'data': [round(d, 2) for d in data], 'backgroundColor': colors[color_index % len(colors)]})
-        color_index += 1
-    return {'labels': [f"{i+1}월" for i in range(12)], 'datasets': datasets, 'detailed_data': detailed_monthly_data}
-
+            detailed_monthly_data[month_index].append({'symbol': symbol, 'amount': payout['amount'] * metrics.get('quantity', 0), 'profile': metrics.get('profile', {}), 'quantity': metrics.get('quantity', 0), 'dps_per_payout': payout['amount'], 'ex_dividend_date': payout['date']})
+    monthly_totals = [sum(item['amount'] for item in items) for items in detailed_monthly_data.values()]
+    return {'labels': [f"{i+1}월" for i in range(12)], 'datasets': [{'data': monthly_totals}], 'detailed_data': detailed_monthly_data}
 
 
 def get_portfolio_analysis_data(user_id):
-    """
-    사용자의 전체 포트폴리오 데이터를 분석하고 종합하는 중앙 서비스 함수.
-    """
     holdings = Holding.query.filter_by(user_id=user_id).all()
-    if not holdings:
-        return None
+    if not holdings: return None
 
     symbols = list({h.symbol for h in holdings})
     price_data_map = stock_api.get_stock_prices_bulk(symbols)
@@ -93,50 +78,41 @@ def get_portfolio_analysis_data(user_id):
     
     dividend_metrics = calculate_dividend_metrics(holdings, price_data_map)
     for symbol, metrics in dividend_metrics.items():
-
         h = next((h for h in holdings if h.symbol == symbol), None)
-        current_price = price_data_map.get(symbol, {}).get('price') or (h.purchase_price if h else 0)
         quantity = h.quantity if h else 0
-        current_value = current_price * quantity
         
-        # 🛠️ Refactoring: 복잡한 계산 로직을 제거하고, 반환된 딕셔너리에서 'months'를 직접 사용
         dividend_schedule = get_dividend_payout_schedule(symbol)
-        metrics['payout_months'] = dividend_schedule['months']
-
+        metrics['payout_months'] = dividend_schedule.get('months', [])
         metrics['profile'] = profile_data_map.get(symbol, {})
         metrics['quantity'] = quantity
-        metrics['current_value'] = current_value
+        
+        adjusted_div_data = get_adjusted_dividend_history(symbol)
+        metrics['note'] = adjusted_div_data.get('note')
+        # 🛠️ 기능 추가: 종목별 상세 차트를 위해 전체 이력 데이터를 전달
+        metrics['adjusted_history'] = adjusted_div_data.get('history', [])
+        metrics['dgr_5y'] = calculate_5yr_avg_dividend_growth(metrics['adjusted_history'])
 
-        dividend_info = get_dividend_months(symbol)
-        metrics['payout_months'] = dividend_info.get("months", [])
-        metrics['profile'] = profile_data_map.get(symbol, {})
-        metrics['quantity'] = next((h.quantity for h in holdings if h.symbol == symbol), 0)
-
+    sorted_dividend_metrics = sorted(
+        dividend_metrics.items(),
+        key=lambda item: item[1].get('expected_annual_dividend', 0),
+        reverse=True
+    )
 
     total_investment = sum(h.quantity * h.purchase_price for h in holdings)
     total_current_value = sum(h.quantity * (price_data_map.get(h.symbol, {}).get('price') or h.purchase_price) for h in holdings)
     
     sector_details = {}
     for h in holdings:
-        profile = profile_data_map.get(h.symbol, {}); 
-        sector = profile.get('sector', 'N/A')
+        profile = profile_data_map.get(h.symbol, {}); sector = profile.get('sector', 'N/A')
         current_value = h.quantity * (price_data_map.get(h.symbol, {}).get('price') or h.purchase_price)
-        if sector not in sector_details:
-            sector_details[sector] = {'total_value': 0, 'holdings': []}
+        if sector not in sector_details: sector_details[sector] = {'total_value': 0, 'holdings': []}
         sector_details[sector]['total_value'] += current_value
         sector_details[sector]['holdings'].append({'symbol': h.symbol, 'value': current_value})
 
     sector_allocation = [{'sector': sector, 'value': details['total_value'], 'holdings': sorted(details['holdings'], key=lambda x: x['value'], reverse=True)} for sector, details in sector_details.items()]
-    
     total_profit_loss = total_current_value - total_investment
     summary_data = {'total_investment': total_investment, 'total_current_value': total_current_value, 'total_profit_loss': total_profit_loss, 'total_return_percent': (total_profit_loss / total_investment * 100) if total_investment > 0 else 0}
     
-    monthly_dividend_data = get_monthly_dividend_distribution(dividend_metrics)
+    monthly_dividend_data = get_monthly_dividend_distribution(sorted_dividend_metrics)
     
-    return {
-        "holdings": holdings,
-        "summary": summary_data,
-        "sector_allocation": sector_allocation,
-        "dividend_metrics": dividend_metrics,
-        "monthly_dividend_data": monthly_dividend_data,
-    }
+    return {"holdings": holdings, "summary": summary_data, "sector_allocation": sector_allocation, "dividend_metrics": sorted_dividend_metrics, "monthly_dividend_data": monthly_dividend_data}
