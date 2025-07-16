@@ -1,5 +1,4 @@
 # 📄 services/portfolio_service.py
-
 from stock_api import stock_api
 from utils import (
     calculate_dividend_metrics, 
@@ -11,12 +10,11 @@ from models import Holding, Trade
 from app import db
 from datetime import datetime
 
-# ... (recalculate_holdings, get_processed_holdings_data 함수는 변경 없음) ...
 def recalculate_holdings(user_id):
     Holding.query.filter_by(user_id=user_id).delete()
     symbols = db.session.query(Trade.symbol).filter_by(user_id=user_id).distinct().all()
     for (symbol,) in symbols:
-        trades = Trade.query.fyilter_by(symbol=symbol, user_id=user_id).order_by(Trade.trade_date, Trade.id).all()
+        trades = Trade.query.filter_by(symbol=symbol, user_id=user_id).order_by(Trade.trade_date, Trade.id).all()
         buy_queue = []
         for trade in trades:
             if trade.trade_type == 'buy':
@@ -88,7 +86,6 @@ def get_portfolio_analysis_data(user_id):
         
         adjusted_div_data = get_adjusted_dividend_history(symbol)
         metrics['note'] = adjusted_div_data.get('note')
-        # 🛠️ 기능 추가: 종목별 상세 차트를 위해 전체 이력 데이터를 전달
         metrics['adjusted_history'] = adjusted_div_data.get('history', [])
         metrics['dgr_5y'] = calculate_5yr_avg_dividend_growth(metrics['adjusted_history'])
 
