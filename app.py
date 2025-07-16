@@ -23,6 +23,9 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///investment.db")
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_recycle": 280, "pool_pre_ping": True}
 
+# 🛠️ Feature: JS에서 하드코딩된 세율을 관리하기 위해 서버 설정으로 추가
+app.config["TAX_RATE"] = 0.154
+
 task_queue = None
 try:
     redis_url = os.environ.get('REDIS_URL')

@@ -46,7 +46,6 @@
         <div class="card h-100">
             <div class="card-header"><h5 class="card-title mb-0">월별 배당금 현황</h5></div>
             <div class="card-body">
-                {# 🛠️ UI 개선: 차트 컨테이너로 감싸서 높이 보장 #}
                 <div class="chart-container" style="height: 300px;">
                     <canvas id="monthlyDividendChart"></canvas>
                 </div>
@@ -73,17 +72,23 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2.3.0/dist/chartjs-chart-treemap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+{# 🛠️ Refactoring: 공통 차트 모듈 로드 #}
+<script src="{{ url_for('static', filename='js/charts.js') }}" defer></script>
 
-<script>
+<script defer>
 document.addEventListener('DOMContentLoaded', function () {
-    Chart.register(ChartDataLabels);
-
     const sectorData = {{ sector_allocation|tojson }};
     const sectorCtx = document.getElementById('sectorAllocationChart')?.getContext('2d');
     const monthlyData = {{ monthly_dividend_data|tojson }};
-    const dividendCtx = document.getElementById('monthlyDividendChart')?.getContext('2d');
 
+    // 🛠️ Refactoring: 월별 배당 차트 로직을 공통 함수 호출로 변경
+    if (monthlyData) {
+        createMonthlyDividendChart('monthlyDividendChart', monthlyData);
+    }
+    
+    // Treemap chart logic (remains the same)
     if (sectorCtx && sectorData && sectorData.length > 0) {
+        Chart.register(ChartDataLabels);
         const totalPortfolioValue = sectorData.reduce((sum, sector) => sum + sector.value, 0);
         new Chart(sectorCtx, {
             type: 'treemap',
@@ -128,52 +133,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         }
                     }
                 } 
-            }
-        });
-    }
-
-    // 🛠️ Fix: 병합 충돌 코드 제거 및 차트 로직을 '배당금 분석' 페이지와 동일하게 통일
-    if (dividendCtx && monthlyData && monthlyData.datasets && monthlyData.datasets[0].data.length > 0) {
-        // 백엔드 서비스에서 이미 월별 총합을 계산하여 단일 데이터셋으로 전달
-        const monthlyTotals = monthlyData.datasets[0].data;
-
-        new Chart(dividendCtx, {
-            type: 'bar',
-            data: { 
-                labels: monthlyData.labels, 
-                datasets: [{
-                    label: '월별 배당금',
-                    data: monthlyTotals,
-                    backgroundColor: 'rgba(25, 135, 84, 0.6)',
-                    borderColor: 'rgba(25, 135, 84, 1)',
-                    borderWidth: 1,
-                    borderRadius: 8,       // 둥근 막대 스타일
-                    borderSkipped: false,  // 막대 모든 면에 radius 적용
-                }]
-            },
-            options: {
-                responsive: true, 
-                maintainAspectRatio: false,
-                layout: { padding: { top: 30 } }, // 데이터 라벨 잘림 방지
-                plugins: {
-                    legend: { display: false }, // 단일 데이터이므로 범례 불필요
-                    tooltip: {
-                        callbacks: {
-                            label: (context) => `총액: $${context.parsed.y.toFixed(2)}`
-                        }
-                    },
-                    datalabels: {
-                        anchor: 'end',
-                        align: 'top',
-                        formatter: (value) => value > 0 ? '$' + value.toFixed(2) : null,
-                        color: '#adb5bd',
-                        font: { weight: 'bold' }
-                    }
-                },
-                scales: { 
-                    x: { grid: { display: false } }, // X축 격자선 제거
-                    y: { display: false, beginAtZero: true } // Y축 제거
-                }
             }
         });
     }
