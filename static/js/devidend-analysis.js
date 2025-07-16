@@ -1,10 +1,10 @@
 // 📄 static/js/dividend-analysis.js
-// 🛠️ 신규 파일: dividends.html의 인라인 스크립트를 분리
-
 document.addEventListener('DOMContentLoaded', function () {
-    // 🛠️ 버그 수정: 플러그인 로드 콜백 사용
-    window.APP_CHARTS.loadPlugins(() => {
-        // 이 콜백 함수는 datalabels 플러그인이 로드된 후 실행됩니다.
+    // 🛠️ 버그 수정: 이 페이지에서 필요한 'datalabels' 플러그인을 명시적으로 요청
+    window.ChartUtils.requestPlugins(['datalabels'], () => {
+        // 이 콜백은 datalabels 플러그인이 로드된 후 실행됩니다.
+        Chart.register(ChartDataLabels); // 플러그인 등록
+
         const analysisContainer = document.getElementById('dividendAnalysisContainer');
         if (!analysisContainer) return;
 
