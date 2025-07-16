@@ -1,11 +1,7 @@
 # 📄 services/portfolio_service.py
 from stock_api import stock_api
-from utils import (
-    calculate_dividend_metrics, 
-    get_dividend_payout_schedule,
-    get_adjusted_dividend_history,
-    calculate_5yr_avg_dividend_growth
-)
+# 🛠️ Refactoring: utils에서 직접 임포트하는 대신, 새로 만든 stock_data_service를 임포트
+from services import stock_data_service
 from models import Holding, Trade
 from app import db
 from datetime import datetime
@@ -55,7 +51,8 @@ def get_processed_holdings_data(user_id):
 def get_monthly_dividend_distribution(dividend_metrics):
     detailed_monthly_data = {i: [] for i in range(12)}
     for symbol, metrics in dividend_metrics:
-        dividend_schedule = get_dividend_payout_schedule(symbol)
+        # 🛠️ Refactoring: utils 대신 stock_data_service 호출
+        dividend_schedule = stock_data_service.get_dividend_payout_schedule(symbol)
         payout_schedule = dividend_schedule['payouts']
         if not payout_schedule: continue
         for payout in payout_schedule:
@@ -74,20 +71,24 @@ def get_portfolio_analysis_data(user_id):
     price_data_map = stock_api.get_stock_prices_bulk(symbols)
     profile_data_map = stock_api.get_stock_profiles_bulk(symbols)
     
-    dividend_metrics = calculate_dividend_metrics(holdings, price_data_map)
+    # 🛠️ Refactoring: utils 대신 stock_data_service 호출
+    dividend_metrics = stock_data_service.calculate_dividend_metrics(holdings, price_data_map)
     for symbol, metrics in dividend_metrics.items():
         h = next((h for h in holdings if h.symbol == symbol), None)
         quantity = h.quantity if h else 0
         
-        dividend_schedule = get_dividend_payout_schedule(symbol)
+        # 🛠️ Refactoring: utils 대신 stock_data_service 호출
+        dividend_schedule = stock_data_service.get_dividend_payout_schedule(symbol)
         metrics['payout_months'] = dividend_schedule.get('months', [])
         metrics['profile'] = profile_data_map.get(symbol, {})
         metrics['quantity'] = quantity
         
-        adjusted_div_data = get_adjusted_dividend_history(symbol)
+        # 🛠️ Refactoring: utils 대신 stock_data_service 호출
+        adjusted_div_data = stock_data_service.get_adjusted_dividend_history(symbol)
         metrics['note'] = adjusted_div_data.get('note')
         metrics['adjusted_history'] = adjusted_div_data.get('history', [])
-        metrics['dgr_5y'] = calculate_5yr_avg_dividend_growth(metrics['adjusted_history'])
+        # 🛠️ Refactoring: utils 대신 stock_data_service 호출
+        metrics['dgr_5y'] = stock_data_service.calculate_5yr_avg_dividend_growth(metrics['adjusted_history'])
 
     sorted_dividend_metrics = sorted(
         dividend_metrics.items(),
