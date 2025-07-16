@@ -1,13 +1,8 @@
 # 📄 models.py
-
 from datetime import datetime
-from sqlalchemy import func, extract
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from app import db
-import logging
-
-logger = logging.getLogger(__name__)
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -39,11 +34,10 @@ class Dividend(db.Model):
     symbol = db.Column(db.String(20), nullable=False, index=True)
     amount = db.Column(db.Float, nullable=False)
     amount_per_share = db.Column(db.Float, nullable=True)
-    dividend_date = db.Column(db.Date, nullable=False)  # 지급일 (Pay Date)
-    ex_dividend_date = db.Column(db.Date, nullable=True, index=True) # 배당락일 (Ex-Dividend Date)
+    dividend_date = db.Column(db.Date, nullable=False)
+    ex_dividend_date = db.Column(db.Date, nullable=True, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
     __table_args__ = (db.UniqueConstraint('user_id', 'symbol', 'ex_dividend_date', name='_user_symbol_ex_date_uc'),)
-
 
 class StockPrice(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -57,6 +51,3 @@ class DividendUpdateCache(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, unique=True)
     last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-# 🛠️ Refactoring: `recalculate_holdings` 함수를 비즈니스 로직을 담당하는 `services/portfolio_service.py`로 이동
-# 이제 models.py 파일은 순수하게 데이터 구조 정의에만 집중합니다.
