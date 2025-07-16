@@ -1,5 +1,4 @@
 # 📄 app.py
-
 import os
 import logging
 from datetime import datetime
@@ -21,7 +20,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key-for-local-testing")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///investment.db")
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_recycle": 280, "pool_pre_ping": True}
 
 task_queue = None
@@ -63,10 +62,8 @@ with app.app_context():
     db.create_all()
     from stock_api import load_us_stocks_data
     load_us_stocks_data()
-    # 🛠️ 기능 추가: 앱 시작 시 수동 재정의 데이터 로드
     from utils import load_manual_overrides
     load_manual_overrides()
-
 
 from routes import main_bp
 app.register_blueprint(main_bp)
