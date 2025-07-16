@@ -14,8 +14,8 @@ function createMonthlyDividendChart(canvasId, chartData, onClickCallback = null)
         return null;
     }
 
-    // 전역 플러그인 등록 해제 (페이지별로 독립적인 설정을 위함)
-    Chart.register(ChartDataLabels);
+    // 🛠️ 버그 수정: 플러그인 등록은 각 페이지의 스크립트에서 명시적으로 처리하도록 이관.
+    // Chart.register(ChartDataLabels);
 
     const chartInstance = new Chart(ctx, {
         type: 'bar',
