@@ -5,7 +5,6 @@
 {% block title %}배당금 분석 - Wealth Tracker{% endblock %}
 
 {% block content %}
-{# 🛠️ Refactoring: JS에 데이터를 전달하기 위한 컨테이너 div 추가 #}
 <div id="dividendAnalysisContainer"
      data-allocation-data="{{ get_dividend_allocation_data(dividend_metrics)|tojson }}"
      data-monthly-data="{{ monthly_dividend_data|tojson }}"
@@ -144,9 +143,6 @@
 {% endblock %}
 
 {% block scripts %}
-{# 🛠️ Refactoring: 복잡한 인라인 스크립트를 외부 파일로 분리 #}
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
-{# 🛠️ Refactoring: 공통 차트 모듈과 페이지 전용 스크립트를 로드. defer로 DOM 파싱 후 실행 보장. #}
 <script src="{{ url_for('static', filename='js/charts.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/dividend-analysis.js') }}" defer></script>
 {% endblock %}
