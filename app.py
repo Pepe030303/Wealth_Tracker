@@ -1,5 +1,6 @@
 # 📄 app.py
 import os
+import sys # 🛠️ Fix: sys 모듈 임포트
 import logging
 from datetime import datetime
 from flask import Flask
@@ -9,6 +10,11 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_login import LoginManager
 import redis
 from rq import Queue
+
+# 🛠️ Fix: 파이썬의 모듈 검색 경로에 현재 프로젝트의 루트 디렉토리를 추가합니다.
+# 이 코드는 순환 참조 및 ImportError를 방지하는 가장 확실한 방법입니다.
+project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, project_root)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -53,7 +59,7 @@ def create_app():
     register_template_filters(app)
 
     with app.app_context():
-        # 🛠️ Fix: 순환 참조를 피하기 위해 Blueprint 임포트 및 등록을 함수 마지막으로 이동
+        # 모든 객체가 초기화된 후, 마지막에 Blueprint를 임포트하고 등록합니다.
         from routes import register_blueprints
         register_blueprints(app)
 
