@@ -11,3 +11,6 @@ pandas
 rq
 redis
 nasdaq-data-link
+# 🛠️ Added: 테스트 프레임워크 추가
+pytest
+pytest-flask
