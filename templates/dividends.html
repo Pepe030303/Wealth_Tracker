@@ -5,8 +5,9 @@
 {% block title %}배당금 분석 - Wealth Tracker{% endblock %}
 
 {% block content %}
+{# 🛠️ Refactor: get_dividend_allocation_data() 함수 호출 대신 미리 계산된 변수 사용 #}
 <div id="dividendAnalysisContainer"
-     data-allocation-data="{{ get_dividend_allocation_data(dividend_metrics)|tojson }}"
+     data-allocation-data="{{ dividend_allocation_data|tojson }}"
      data-monthly-data="{{ monthly_dividend_data|tojson }}"
      data-tax-rate="{{ tax_rate }}">
 
