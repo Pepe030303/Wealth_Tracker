@@ -19,9 +19,10 @@
     </style>
 </head>
 <body class="d-flex flex-column min-vh-100">
+    {# 🛠️ Refactor: url_for 경로를 새로운 Blueprint 기준으로 수정 #}
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top shadow-sm">
         <div class="container-fluid">
-            <a class="navbar-brand fw-bold" href="{{ url_for('main.dashboard') if current_user.is_authenticated else url_for('main.login') }}">
+            <a class="navbar-brand fw-bold" href="{{ url_for('portfolio.dashboard') if current_user.is_authenticated else url_for('auth.login') }}">
                 <i class="fas fa-chart-line me-2 text-primary"></i> Wealth Tracker
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,21 +40,21 @@
                     </div>
 
                     <ul class="navbar-nav">
-                        <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.dashboard' %}active{% endif %}" href="{{ url_for('main.dashboard') }}"><i class="fas fa-tachometer-alt me-1"></i>대시보드</a></li>
-                        <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.allocation' %}active{% endif %}" href="{{ url_for('main.allocation') }}"><i class="fas fa-chart-pie me-1"></i>포트폴리오 비중</a></li>
-                        <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.holdings' %}active{% endif %}" href="{{ url_for('main.holdings') }}"><i class="fas fa-wallet me-1"></i>보유 종목</a></li>
+                        <li class="nav-item"><a class="nav-link {% if request.endpoint == 'portfolio.dashboard' %}active{% endif %}" href="{{ url_for('portfolio.dashboard') }}"><i class="fas fa-tachometer-alt me-1"></i>대시보드</a></li>
+                        <li class="nav-item"><a class="nav-link {% if request.endpoint == 'portfolio.allocation' %}active{% endif %}" href="{{ url_for('portfolio.allocation') }}"><i class="fas fa-chart-pie me-1"></i>포트폴리오 비중</a></li>
+                        <li class="nav-item"><a class="nav-link {% if request.endpoint == 'portfolio.holdings' %}active{% endif %}" href="{{ url_for('portfolio.holdings') }}"><i class="fas fa-wallet me-1"></i>보유 종목</a></li>
                         <li class="nav-item dropdown">
                              <a class="nav-link dropdown-toggle {% if 'dividend' in request.endpoint %}active{% endif %}" href="#" id="dividendDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fas fa-coins me-1"></i>배당금</a>
                             <ul class="dropdown-menu" aria-labelledby="dividendDropdown">
-                                <li><a class="dropdown-item" href="{{ url_for('main.dividends') }}">배당금 분석</a></li>
-                                <li><a class="dropdown-item" href="{{ url_for('main.dividends_history') }}">배당금 내역</a></li>
+                                <li><a class="dropdown-item" href="{{ url_for('portfolio.dividends') }}">배당금 분석</a></li>
+                                <li><a class="dropdown-item" href="{{ url_for('portfolio.dividends_history') }}">배당금 내역</a></li>
                             </ul>
                         </li>
-                        <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.trades' %}active{% endif %}" href="{{ url_for('main.trades') }}"><i class="fas fa-exchange-alt me-1"></i>거래 기록</a></li>
+                        <li class="nav-item"><a class="nav-link {% if request.endpoint == 'trades.trades' %}active{% endif %}" href="{{ url_for('trades.trades') }}"><i class="fas fa-exchange-alt me-1"></i>거래 기록</a></li>
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fas fa-user me-1"></i>{{ current_user.username }}</a>
                             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
-                                <li><a class="dropdown-item" href="{{ url_for('main.logout') }}">로그아웃</a></li>
+                                <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">로그아웃</a></li>
                             </ul>
                         </li>
                     </ul>
@@ -68,8 +69,8 @@
                 </div>
                 {% else %}
                 <ul class="navbar-nav ms-auto">
-                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.login' %}active{% endif %}" href="{{ url_for('main.login') }}">로그인</a></li>
-                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.signup' %}active{% endif %}" href="{{ url_for('main.signup') }}">회원가입</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'auth.login' %}active{% endif %}" href="{{ url_for('auth.login') }}">로그인</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'auth.signup' %}active{% endif %}" href="{{ url_for('auth.signup') }}">회원가입</a></li>
                 </ul>
                 {% endif %}
             </div>
@@ -95,28 +96,19 @@
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    {# 🛠️ 버그 수정: 플러그인 로드/등록 방식을 안정적인 콜백 방식으로 변경 #}
     <script>
         (function() {
-            // 네임스페이스를 사용하여 전역 스코프 오염 방지
             window.ChartUtils = {
-                // 플러그인 로드 상태 및 콜백 큐 관리
                 pluginStatus: {},
                 pluginCallbacks: {},
-
-                // 스크립트 로딩 함수
                 loadScript: function(id, src) {
-                    // 이미 로딩 중이거나 로드된 스크립트는 다시 로드하지 않음
                     if (this.pluginStatus[id]) return;
-                    
                     this.pluginStatus[id] = 'loading';
                     this.pluginCallbacks[id] = [];
-
                     const script = document.createElement('script');
                     script.src = src;
                     script.onload = () => {
                         this.pluginStatus[id] = 'loaded';
-                        // 로드가 완료되면 대기 중인 모든 콜백 실행
                         this.pluginCallbacks[id].forEach(callback => callback());
                         this.pluginCallbacks[id] = [];
                     };
@@ -126,9 +118,6 @@
                     };
                     document.head.appendChild(script);
                 },
-
-                // 플러그인 로드를 요청하는 인터페이스 함수
-                // 필요한 플러그인 ID 배열과 완료 후 실행할 콜백 함수를 받음
                 requestPlugins: function(pluginIds, onReady) {
                     const promises = pluginIds.map(id => {
                         return new Promise((resolve) => {
@@ -138,7 +127,6 @@
                             } else if (status === 'loading') {
                                 this.pluginCallbacks[id].push(resolve);
                             } else {
-                                // 아직 로드 시작도 안한 경우
                                 this.pluginCallbacks[id] = [resolve];
                                 if (id === 'datalabels') {
                                     this.loadScript(id, "https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0");
@@ -148,8 +136,6 @@
                             }
                         });
                     });
-
-                    // 모든 요청된 플러그인이 로드되면 최종 콜백 실행
                     Promise.all(promises).then(onReady);
                 }
             };
@@ -166,7 +152,7 @@
             clearTimeout(searchTimeout);
             if (query.length < 1) { resultsContainer.classList.add('d-none'); return; }
             searchTimeout = setTimeout(() => {
-                fetch(`/api/search-stocks?q=${query}`)
+                fetch(`{{ url_for('stock.search_stocks') }}?q=${query}`)
                     .then(response => response.json())
                     .then(data => {
                         resultsContainer.innerHTML = '';
@@ -176,7 +162,7 @@
                             data.forEach(stock => {
                                 const item = document.createElement('a');
                                 item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
-                                item.href = `/stock/${stock.ticker}`;
+                                item.href = `{{ url_for('stock.stock_detail', symbol='__SYMBOL__') }}`.replace('__SYMBOL__', stock.ticker);
                                 item.innerHTML = `<span><strong class="me-2">${stock.ticker}</strong><small class="text-muted text-truncate" style="max-width: 150px;">${stock.name}</small></span><i class="fas fa-chevron-right"></i>`;
                                 resultList.appendChild(item);
                             });
