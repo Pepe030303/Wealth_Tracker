@@ -15,6 +15,7 @@ logging.basicConfig(level=logging.INFO)
 class Base(DeclarativeBase): pass
 db = SQLAlchemy(model_class=Base)
 login_manager = LoginManager()
+task_queue = None
 
 def create_app():
     """Flask 애플리케이션 팩토리 함수"""
@@ -29,29 +30,34 @@ def create_app():
     # 데이터베이스 및 로그인 매니저 초기화
     db.init_app(app)
     login_manager.init_app(app)
-    login_manager.login_view = 'auth.login' # 🛠️ Refactor: Blueprint 엔드포인트로 변경
+    login_manager.login_view = 'auth.login'
     login_manager.login_message = "로그인이 필요한 페이지입니다."
     login_manager.login_message_category = "info"
 
     # Redis 및 RQ 초기화
+    global task_queue
     try:
         redis_url = os.environ.get('REDIS_URL')
         if not redis_url:
             raise ValueError("REDIS_URL 환경 변수가 설정되지 않았습니다.")
         conn = redis.from_url(redis_url)
-        app.task_queue = Queue('wealth-tracker-tasks', connection=conn)
+        task_queue = Queue('wealth-tracker-tasks', connection=conn)
     except Exception as e:
         app.logger.error(f"Redis 연결 실패: {e}")
-        app.task_queue = None
+        task_queue = None
+    
+    # app 객체에 task_queue 할당
+    app.task_queue = task_queue
 
     # 템플릿 필터 등록
     register_template_filters(app)
 
-    # Blueprint 등록
-    from routes import register_blueprints
-    register_blueprints(app)
-
     with app.app_context():
+        # 🛠️ Fix: 순환 참조를 피하기 위해 Blueprint 임포트 및 등록을 함수 마지막으로 이동
+        from routes import register_blueprints
+        register_blueprints(app)
+
+        # 애플리케이션 컨텍스트 내에서 초기 데이터 로드
         import models
         db.create_all()
         from stock_api import load_us_stocks_data
@@ -80,10 +86,9 @@ from models import User
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+# Gunicorn과 같은 프로덕션 서버가 'app' 객체를 찾을 수 있도록 전역 스코프에 생성
 app = create_app()
 
-# task_queue를 전역에서 접근할 수 있도록 app 컨텍스트에서 설정
-task_queue = app.task_queue
-
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
+    # 로컬에서 직접 실행할 때 (예: python app.py)
+    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)), debug=True)
