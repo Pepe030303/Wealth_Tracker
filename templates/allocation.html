@@ -4,154 +4,86 @@
 {% block title %}포트폴리오 비중 - Wealth Tracker{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-12">
-        <h1 class="mb-4">
-            <i class="fas fa-chart-pie me-2"></i>
-            포트폴리오 비중
-        </h1>
+{# 🛠️ Refactor: 데이터 전달을 위한 컨테이너 div 추가 #}
+<div id="allocationPageContainer" data-allocation-data="{{ allocation_data|tojson }}">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">
+                <i class="fas fa-chart-pie me-2"></i>
+                포트폴리오 비중
+            </h1>
+        </div>
     </div>
-</div>
 
-{% if allocation_data %}
-<div class="row">
-    <!-- 도넛 차트 -->
-    <div class="col-lg-8 mb-4">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-chart-pie me-2"></i>
-                    자산 배분 현황
-                </h5>
+    {% if allocation_data %}
+    <div class="row">
+        <!-- 도넛 차트 -->
+        <div class="col-lg-8 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-pie me-2"></i>
+                        자산 배분 현황
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="position: relative; height: 400px;">
+                        <canvas id="allocationChart"></canvas>
+                    </div>
+                </div>
             </div>
-            <div class="card-body">
-                <div class="chart-container" style="position: relative; height: 400px;">
-                    <canvas id="allocationChart"></canvas>
+        </div>
+        
+        <!-- 비중 테이블 -->
+        <div class="col-lg-4 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-list me-2"></i>
+                        종목별 비중 (평가금액 순)
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>종목</th>
+                                    <th class="text-end">평가금액</th>
+                                    <th class="text-end">비중</th>
+                                </tr>
+                            </thead>
+                            <tbody id="allocation-table-body">
+                                <!-- JavaScript로 동적 생성 -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-    
-    <!-- 비중 테이블 -->
-    <div class="col-lg-4 mb-4">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-list me-2"></i>
-                    종목별 비중 (평가금액 순)
-                </h5>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead>
-                            <tr>
-                                <th>종목</th>
-                                <th class="text-end">평가금액</th>
-                                <th class="text-end">비중</th>
-                            </tr>
-                        </thead>
-                        <tbody id="allocation-table-body">
-                            <!-- JavaScript로 동적 생성 -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
-{% else %}
-<div class="row">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-body">
-                <div class="text-center py-5">
-                    <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
-                    <p class="text-muted">포트폴리오 데이터가 없습니다.</p>
-                    <a href="{{ url_for('main.trades') }}" class="btn btn-primary">
-                        <i class="fas fa-plus me-1"></i>거래 추가하기
-                    </a>
+    {% else %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="text-center py-5">
+                        <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">포트폴리오 데이터가 없습니다.</p>
+                        <a href="{{ url_for('main.trades') }}" class="btn btn-primary">
+                            <i class="fas fa-plus me-1"></i>거래 추가하기
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+    {% endif %}
 </div>
-{% endif %}
 {% endblock %}
 
 {% block scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const allocationData = {{ allocation_data|tojson }};
-
-    if (allocationData && allocationData.length > 0) {
-        // 총 가치 계산
-        const totalValue = allocationData.reduce((sum, item) => sum + item.value, 0);
-        
-        // 차트 데이터 준비
-        const labels = allocationData.map(item => item.symbol);
-        const values = allocationData.map(item => item.value);
-        
-        // 색상 팔레트
-        const colors = [
-            '#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', 
-            '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2'
-        ];
-        
-        // 도넛 차트 생성
-        const ctx = document.getElementById('allocationChart').getContext('2d');
-        const allocationChart = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: labels,
-                datasets: [{
-                    data: values,
-                    backgroundColor: colors,
-                    borderColor: '#343a40' // Dark theme background color for borders
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'right'
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                const label = context.label || '';
-                                const value = context.parsed;
-                                const percentage = (value / totalValue * 100).toFixed(2);
-                                return ` ${label}: $${value.toFixed(2)} (${percentage}%)`;
-                            }
-                        }
-                    },
-                    datalabels: { // 도넛 차트에서는 라벨을 숨김
-                        display: false
-                    }
-                }
-            }
-        });
-        
-        // 비중 테이블 생성
-        const tableBody = document.getElementById('allocation-table-body');
-        allocationData.forEach((item, index) => {
-            const percentage = (item.value / totalValue * 100).toFixed(2);
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>
-                    <span class="d-inline-block rounded-circle me-2" 
-                          style="width: 12px; height: 12px; background-color: ${colors[index % colors.length]}; vertical-align: middle;"></span>
-                    <strong>${item.symbol}</strong>
-                </td>
-                <td class="text-end">$${item.value.toFixed(2)}</td>
-                <td class="text-end">${percentage}%</td>
-            `;
-            tableBody.appendChild(row);
-        });
-    }
-});
-</script>
+{# 🛠️ Refactor: 인라인 스크립트를 외부 파일로 분리 #}
+<script src="{{ url_for('static', filename='js/allocation-chart.js') }}" defer></script>
 {% endblock %}

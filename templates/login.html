@@ -10,7 +10,8 @@
                 <h3>로그인</h3>
             </div>
             <div class="card-body">
-                <form method="POST" action="{{ url_for('main.login') }}">
+                {# 🛠️ Refactor: url_for 경로 수정 #}
+                <form method="POST" action="{{ url_for('auth.login') }}">
                     <div class="form-floating mb-3">
                         <input type="text" class="form-control" id="username" name="username" placeholder="아이디" required>
                         <label for="username">아이디</label>
@@ -25,7 +26,8 @@
                 </form>
             </div>
             <div class="card-footer text-center">
-                <small>계정이 없으신가요? <a href="{{ url_for('main.signup') }}">회원가입</a></small>
+                {# 🛠️ Refactor: url_for 경로 수정 #}
+                <small>계정이 없으신가요? <a href="{{ url_for('auth.signup') }}">회원가입</a></small>
             </div>
         </div>
     </div>

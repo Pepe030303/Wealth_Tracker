@@ -41,5 +41,4 @@ def set_to_redis_cache(key, value, ttl_hours=6):
     if not redis_conn: return
     redis_conn.setex(key, timedelta(hours=ttl_hours), json.dumps(value))
 
-def get_dividend_allocation_data(dividend_metrics):
-    return [{'symbol': item[0], 'value': item[1]['expected_annual_dividend']} for item in dividend_metrics if item[1].get('expected_annual_dividend', 0) > 0]
+# 🛠️ Refactor: 비즈니스 로직을 services/portfolio_service.py로 이전함

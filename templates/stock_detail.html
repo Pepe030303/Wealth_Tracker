@@ -4,120 +4,68 @@
 {% block title %}{{ symbol }} 종목 정보 - Wealth Tracker{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h1 class="mb-0">{{ symbol }}</h1>
-        <p class="text-muted fs-5">{{ profile.name }}</p>
+{# 🛠️ Refactor: 데이터 전달을 위한 컨테이너 div 추가 #}
+<div id="stockDetailPageContainer" 
+     data-price-history="{{ price_history|tojson }}" 
+     data-symbol="{{ symbol }}">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mb-0">{{ symbol }}</h1>
+            <p class="text-muted fs-5">{{ profile.name }}</p>
+        </div>
+        <button class="btn btn-outline-secondary" onclick="history.back()">
+            <i class="fas fa-arrow-left me-2"></i>뒤로가기
+        </button>
     </div>
-    <button class="btn btn-outline-secondary" onclick="history.back()">
-        <i class="fas fa-arrow-left me-2"></i>뒤로가기
-    </button>
-</div>
 
-<!-- 종목 요약 정보 카드 -->
-<div class="row mb-4">
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-body">
-                <h6 class="card-subtitle text-muted mb-2">현재가</h6>
-                <h3 class="card-title fw-bold">${{ '%.2f'|format(price_data.price) }}</h3>
+    <!-- 종목 요약 정보 카드 -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-subtitle text-muted mb-2">현재가</h6>
+                    <h3 class="card-title fw-bold">${{ '%.2f'|format(price_data.price) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-subtitle text-muted mb-2">일일 변동</h6>
+                    <h3 class="card-title {% if price_data.change >= 0 %}text-success{% else %}text-danger{% endif %}">
+                        {{ '%+.2f'|format(price_data.change) }} ({{ '%+.2f'|format(price_data.change_percent) }}%)
+                    </h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-subtitle text-muted mb-2">섹터</h6>
+                    <h3 class="card-title">{{ profile.sector }}</h3>
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-body">
-                <h6 class="card-subtitle text-muted mb-2">일일 변동</h6>
-                <h3 class="card-title {% if price_data.change >= 0 %}text-success{% else %}text-danger{% endif %}">
-                    {{ '%+.2f'|format(price_data.change) }} ({{ '%+.2f'|format(price_data.change_percent) }}%)
-                </h3>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-body">
-                <h6 class="card-subtitle text-muted mb-2">섹터</h6>
-                <h3 class="card-title">{{ profile.sector }}</h3>
-            </div>
-        </div>
-    </div>
-</div>
 
-<!-- 시세 차트 -->
-<div class="card">
-    <div class="card-header">
-        <h5 class="card-title mb-0">
-            <i class="fas fa-chart-line me-2"></i>
-            6개월 시세
-        </h5>
-    </div>
-    <div class="card-body">
-        <div class="chart-container" style="position: relative; height: 40vh; width: 100%;">
-            <canvas id="stockPriceChart"></canvas>
+    <!-- 시세 차트 -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-chart-line me-2"></i>
+                6개월 시세
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="chart-container" style="position: relative; height: 40vh; width: 100%;">
+                <canvas id="stockPriceChart"></canvas>
+            </div>
         </div>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const ctx = document.getElementById('stockPriceChart').getContext('2d');
-    
-    // Jinja 템플릿에서 받은 데이터를 Javascript 변수로 변환
-    const priceHistory = {{ price_history|tojson }};
-    const labels = priceHistory.dates;
-    const dataPoints = priceHistory.prices;
-    
-    // 가격 변동에 따른 선 색상 결정
-    const firstPrice = dataPoints[0];
-    const lastPrice = dataPoints[dataPoints.length - 1];
-    const chartColor = lastPrice >= firstPrice ? 'rgba(25, 135, 84, 0.7)' : 'rgba(220, 53, 69, 0.7)';
-    const chartBorderColor = lastPrice >= firstPrice ? '#198754' : '#dc3545';
-
-    new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: '{{ symbol }} Price ($)',
-                data: dataPoints,
-                borderColor: chartBorderColor,
-                backgroundColor: chartColor,
-                fill: true,
-                tension: 0.1, // 선을 부드럽게
-                pointRadius: 0 // 데이터 포인트를 숨김
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: {
-                    ticks: {
-                        // X축 레이블이 너무 많으면 자동으로 건너뛰도록 설정
-                        autoSkip: true,
-                        maxTicksLimit: 10
-                    }
-                },
-                y: {
-                    ticks: {
-                        // Y축 레이블에 달러($) 기호 추가
-                        callback: function(value, index, values) {
-                            return '$' + value;
-                        }
-                    }
-                }
-            },
-            plugins: {
-                tooltip: {
-                    mode: 'index',
-                    intersect: false
-                }
-            }
-        }
-    });
-});
-</script>
+{# 🛠️ Refactor: 인라인 스크립트를 외부 파일로 분리 #}
+<script src="{{ url_for('static', filename='js/stock-detail-chart.js') }}" defer></script>
 {% endblock %}

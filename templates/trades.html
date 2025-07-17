@@ -40,7 +40,8 @@
                                     <td>${{ "%.2f"|format(trade.price) }}</td>
                                     <td>${{ "%.2f"|format(trade.quantity * trade.price) }}</td>
                                     <td class="text-end">
-                                        <a href="{{ url_for('main.delete_trade', trade_id=trade.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('이 거래를 삭제하시겠습니까? 보유 종목이 재계산됩니다.')">
+                                        {# 🛠️ Refactor: url_for 경로 수정 #}
+                                        <a href="{{ url_for('trades.delete_trade', trade_id=trade.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('이 거래를 삭제하시겠습니까? 보유 종목이 재계산됩니다.')">
                                             <i class="fas fa-trash"></i>
                                         </a>
                                     </td>
@@ -66,7 +67,8 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header"><h5 class="modal-title"><i class="fas fa-plus me-2"></i>거래 추가</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-            <form method="POST" action="{{ url_for('main.add_trade') }}">
+            {# 🛠️ Refactor: url_for 경로 수정 #}
+            <form method="POST" action="{{ url_for('trades.add_trade') }}">
                 <div class="modal-body">
                     <div class="mb-3"><label for="symbol" class="form-label">종목 심볼</label><input type="text" class="form-control" id="symbol" name="symbol" placeholder="예: AAPL, SCHD" required></div>
                     <div class="mb-3"><label for="trade_type" class="form-label">거래 구분</label><select class="form-select" id="trade_type" name="trade_type" required><option value="">선택하세요</option><option value="buy">매수 (Buy)</option><option value="sell">매도 (Sell)</option></select></div>
