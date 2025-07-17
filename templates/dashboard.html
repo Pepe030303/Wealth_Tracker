@@ -3,7 +3,6 @@
 {% extends "base.html" %}
 {% block title %}대시보드 - Wealth Tracker{% endblock %}
 {% block content %}
-{# 🛠️ Refactor: 데이터 전달을 위한 컨테이너 div 추가 #}
 <div id="dashboardPageContainer" 
      data-monthly-data="{{ monthly_dividend_data|tojson }}" 
      data-sector-data="{{ sector_allocation|tojson }}">
@@ -70,14 +69,14 @@
     <div class="text-center py-5">
         <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
         <p class="text-muted">아직 보유 종목이 없습니다.</p>
-        <a href="{{ url_for('main.trades') }}" class="btn btn-primary"><i class="fas fa-plus me-1"></i>첫 거래 추가하기</a>
+        {# 🛠️ Refactor: url_for 경로 수정 #}
+        <a href="{{ url_for('trades.trades') }}" class="btn btn-primary"><i class="fas fa-plus me-1"></i>첫 거래 추가하기</a>
     </div>
     {% endif %}
 </div>
 {% endblock %}
 
 {% block scripts %}
-{# 🛠️ Refactor: 인라인 스크립트를 외부 파일로 분리. charts.js는 dashboard-charts.js에서 필요로 하므로 먼저 로드 #}
 <script src="{{ url_for('static', filename='js/charts.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/dashboard-charts.js') }}" defer></script>
 {% endblock %}
