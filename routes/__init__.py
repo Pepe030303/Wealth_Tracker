@@ -1,5 +1,5 @@
 # 📄 routes/__init__.py
-# 🛠️ New File: Blueprint 등록을 위한 초기화 파일
+# 🛠️ 이 파일의 내용은 정확해야 합니다. 다시 한번 확인을 위해 제공합니다.
 
 def register_blueprints(app):
     """애플리케이션에 모든 Blueprint를 등록합니다."""
