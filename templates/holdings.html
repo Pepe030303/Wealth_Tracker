@@ -1,7 +1,6 @@
 {# 📄 templates/holdings.html #}
 
 {% extends "base.html" %}
-{# 🛠️ Refactoring: 매크로 파일 임포트 #}
 {% from 'macros.html' import render_stock_logo with context %}
 
 {% block title %}보유 종목 - Wealth Tracker{% endblock %}
@@ -10,7 +9,8 @@
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1><i class="fas fa-wallet me-2"></i>보유 종목</h1>
-            <a href="{{ url_for('main.trades') }}" class="btn btn-primary"><i class="fas fa-exchange-alt me-1"></i>거래 기록으로 이동</a>
+            {# 🛠️ Refactor: url_for 경로 수정 #}
+            <a href="{{ url_for('trades.trades') }}" class="btn btn-primary"><i class="fas fa-exchange-alt me-1"></i>거래 기록으로 이동</a>
         </div>
     </div>
 </div>
@@ -21,9 +21,7 @@
                 {% for data in holdings_data %}
                 <div class="list-group-item p-3">
                     <div class="row align-items-center g-3">
-                        {# 좌측: 종목 로고, 심볼, 이름 #}
                         <div class="col-lg-3 d-flex align-items-center">
-                            {# 🛠️ Refactoring: 복잡한 if/else 블록을 매크로 호출로 변경 #}
                             <div class="me-3">
                                 {{ render_stock_logo(data.profile, data.holding.symbol) }}
                             </div>
@@ -33,7 +31,6 @@
                             </div>
                         </div>
 
-                        {# 우측: 재무 상세 정보 #}
                         <div class="col-lg-9">
                             <div class="row text-center text-lg-start">
                                 <div class="col-md-4 col-sm-6 mb-2 mb-md-0">
@@ -61,7 +58,8 @@
             <div class="text-center py-5">
                 <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
                 <p class="text-muted">보유 종목이 없습니다.</p>
-                <a href="{{ url_for('main.trades') }}" class="btn btn-primary"><i class="fas fa-plus me-1"></i>거래 추가하기</a>
+                {# 🛠️ Refactor: url_for 경로 수정 #}
+                <a href="{{ url_for('trades.trades') }}" class="btn btn-primary"><i class="fas fa-plus me-1"></i>거래 추가하기</a>
             </div>
         {% endif %}
     </div>
