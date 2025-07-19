@@ -2,7 +2,8 @@
 
 import yfinance as yf
 import pandas as pd
-from app import db, app
+# 🛠️ Fix: 'app' 인스턴스 대신 'create_app' 팩토리 함수와 'db' 객체를 import
+from app import db, create_app
 from models import Holding, Dividend, DividendUpdateCache, Trade
 import logging
 from datetime import datetime, timedelta
@@ -39,6 +40,8 @@ def update_all_dividends_for_user(user_id):
     사용자의 전체 보유 종목에 대해, '배당락일' 기준 보유 수량을 계산하여
     실제 받을 배당금을 'Dividend' 테이블에 기록하는 백그라운드 작업.
     """
+    # 🛠️ Fix: 백그라운드 작업 내에서 직접 앱 컨텍스트를 생성하여 사용
+    app = create_app()
     with app.app_context():
         try:
             last_update_record = DividendUpdateCache.query.filter_by(user_id=user_id).first()
@@ -56,12 +59,10 @@ def update_all_dividends_for_user(user_id):
             for (symbol,) in symbols_traded:
                 try:
                     ticker = yf.Ticker(symbol)
-                    # 🛠️ Changed: actions 대신 dividends 속성을 직접 사용하여 더 안정적인 데이터 조회
                     dividends_df = ticker.dividends
                     if dividends_df is None or dividends_df.empty:
                         continue
                     
-                    # yfinance가 반환하는 dividends 시리즈를 데이터프레임처럼 처리
                     dividends_data = dividends_df.reset_index()
                     dividends_data.columns = ['Ex-Dividend-Date', 'Dividends']
                     
@@ -70,7 +71,6 @@ def update_all_dividends_for_user(user_id):
                         if amount_per_share <= 0: continue
                         
                         ex_dividend_date = row['Ex-Dividend-Date']
-                        # Pandas Timestamp를 Python datetime.date 객체로 변환
                         ex_date_native = ex_dividend_date.to_pydatetime().date()
                         
                         quantity_on_ex_date = get_quantity_on_date(user_id, symbol, ex_date_native)
@@ -84,8 +84,6 @@ def update_all_dividends_for_user(user_id):
 
                         if not exists:
                             total_amount = float(amount_per_share) * quantity_on_ex_date
-                            # dividend_date는 실제 지급일이지만, yfinance에서 정확한 pay date를 제공하지 않으므로
-                            # ex_dividend_date를 임시로 사용. Polygon.io 등 유료 API 사용 시 개선 가능.
                             new_dividend = Dividend(
                                 symbol=symbol,
                                 amount=total_amount,
@@ -97,14 +95,12 @@ def update_all_dividends_for_user(user_id):
                             db.session.add(new_dividend)
                             total_new_dividends += 1
                 
-                # 🛠️ Changed: 오류 로깅 시 어떤 종목에서 문제 발생했는지 명확히 기록
                 except requests.exceptions.HTTPError as http_err:
                     logger.warning(f"배당 정보 조회 실패 (HTTP 오류) (User: {user_id}, Symbol: {symbol}): {http_err}")
                 except (AttributeError, KeyError, IndexError, TypeError) as e:
                     logger.warning(f"배당 정보 파싱 오류 (User: {user_id}, Symbol: {symbol}): {e}")
                 except Exception as e:
                     logger.error(f"배당 처리 중 예상치 못한 오류 (User: {user_id}, Symbol: {symbol}): {e}")
-                    # 개별 종목 오류 시 롤백하지 않고 다음 종목으로 넘어가기 위해 continue 처리
                     continue
             
             if total_new_dividends > 0:
