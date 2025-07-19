@@ -5,17 +5,12 @@ import requests
 import logging
 import json
 from datetime import datetime, timedelta
-from app import db
+# 🛠️ Refactor: app 대신 extensions에서 db, redis_conn 객체를 가져옵니다.
+from extensions import db, redis_conn
 from models import StockPrice
 import yfinance as yf
 import pandas as pd
 from redis import Redis
-
-try:
-    from app import conn as redis_conn
-except ImportError:
-    redis_conn = None
-    logging.warning("Redis 연결을 가져오지 못했습니다. 캐싱이 비활성화됩니다.")
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +185,6 @@ class StockAPIService:
         return results
 
     def get_stock_price(self, symbol):
-        # 🛠️ Refactoring: API 호출 로직을 get_stock_prices_bulk 호출로 위임하여 중복 제거
         cache_key = f"price:{symbol}"
         if cached := self._get_from_redis_cache(cache_key): 
             return cached
@@ -199,23 +193,20 @@ class StockAPIService:
         if api_result := api_result_map.get(symbol):
             return api_result
 
-        # API 호출 실패 시 최후의 보루로 DB 캐시 조회
         if db_cached := StockPrice.query.filter_by(symbol=symbol).first():
             if (datetime.utcnow() - db_cached.last_updated) < self.cache_ttl:
                 price_data = {'price': db_cached.current_price, 'change': db_cached.change, 'change_percent': db_cached.change_percent}
-                self._set_to_redis_cache(cache_key, price_data) # Redis 캐시에도 다시 저장
+                self._set_to_redis_cache(cache_key, price_data) 
                 return price_data
             
         return None
 
     def get_stock_profile(self, symbol):
-        # 🛠️ Refactoring: API 호출 로직을 get_stock_profiles_bulk 호출로 위임하여 중복 제거
         cache_key = f"profile:{symbol}"
         if cached := self._get_from_redis_cache(cache_key): 
             return cached
 
         api_result_map = self.get_stock_profiles_bulk([symbol])
-        # get_stock_profiles_bulk는 실패 시에도 기본값을 반환하므로, 항상 값을 가짐
         return api_result_map.get(symbol)
 
     def get_price_history(self, symbol, period='6mo'):
