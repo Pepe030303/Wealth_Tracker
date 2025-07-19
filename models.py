@@ -2,7 +2,8 @@
 from datetime import datetime
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
-from app import db
+# 🛠️ Refactor: app 대신 extensions에서 db 객체를 가져옵니다.
+from extensions import db
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)

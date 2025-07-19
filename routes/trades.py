@@ -1,9 +1,8 @@
 # 📄 routes/trades.py
-# 🛠️ New File: 거래 기록 관련 라우트를 분리한 Blueprint
-
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from datetime import datetime
-from app import db
+# 🛠️ Refactor: app 대신 extensions에서 db 객체를 가져옵니다.
+from extensions import db
 from models import Trade, Holding
 from services.portfolio_service import recalculate_holdings
 from flask_login import current_user, login_required
@@ -39,8 +38,10 @@ def add_trade():
                 
         trade = Trade(symbol=symbol, trade_type=trade_type, quantity=quantity, price=price, trade_date=trade_date, user_id=current_user.id)
         db.session.add(trade)
-        db.session.commit()
+        # 🛠️ Refactor: 서비스 로직 호출 후 라우트 레벨에서 커밋
         recalculate_holdings(current_user.id)
+        db.session.commit()
+        
         flash(f'{symbol} {trade_type.upper()} 거래가 성공적으로 추가되었습니다.', 'success')
         
     except (ValueError, TypeError) as e:
@@ -58,7 +59,8 @@ def add_trade():
 def delete_trade(trade_id):
     trade = Trade.query.filter_by(id=trade_id, user_id=current_user.id).first_or_404()
     db.session.delete(trade)
-    db.session.commit()
+    # 🛠️ Refactor: 서비스 로직 호출 후 라우트 레벨에서 커밋
     recalculate_holdings(current_user.id)
+    db.session.commit()
     flash(f'{trade.symbol} 거래가 삭제되었습니다.', 'success')
     return redirect(url_for('trades.trades'))
