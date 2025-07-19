@@ -1,118 +1,68 @@
-{% extends "base.html" %}
-{% block title %}거래 기록 - Wealth Tracker{% endblock %}
-{% block content %}
-<div class="row">
-    <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1><i class="fas fa-exchange-alt me-2"></i>거래 기록</h1>
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTradeModal"><i class="fas fa-plus me-1"></i>거래 추가</button>
-        </div>
-    </div>
-</div>
+# 📄 routes/trades.py
+# 🛠️ New File: 거래 기록 관련 라우트를 분리한 Blueprint
 
-<div class="row">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0"><i class="fas fa-history me-2"></i>전체 거래 기록</h5>
-                <div class="w-50">
-                     <input type="text" id="tradeSearch" class="form-control form-control-sm" placeholder="종목 심볼로 검색...">
-                </div>
-            </div>
-            <div class="card-body p-0">
-                {% if trades %}
-                    <div class="table-responsive">
-                        <table class="table table-striped table-hover mb-0">
-                            <thead>
-                                <tr><th>거래일</th><th>종목</th><th>구분</th><th>수량</th><th>가격</th><th>총액</th><th class="text-end">작업</th></tr>
-                            </thead>
-                            <tbody id="tradesTableBody">
-                                {% for trade in trades %}
-                                <tr>
-                                    <td>{{ trade.trade_date.strftime('%Y-%m-%d') }}</td>
-                                    <td class="trade-symbol"><strong>{{ trade.symbol }}</strong></td>
-                                    <td>
-                                        <span class="badge {% if trade.trade_type == 'buy' %}bg-success-subtle text-success-emphasis{% else %}bg-danger-subtle text-danger-emphasis{% endif %}">
-                                            {% if trade.trade_type == 'buy' %}매수{% else %}매도{% endif %}
-                                        </span>
-                                    </td>
-                                    <td>{{ trade.quantity }}</td>
-                                    <td>${{ "%.2f"|format(trade.price) }}</td>
-                                    <td>${{ "%.2f"|format(trade.quantity * trade.price) }}</td>
-                                    <td class="text-end">
-                                        {# 🛠️ Refactor: url_for 경로 수정 #}
-                                        <a href="{{ url_for('trades.delete_trade', trade_id=trade.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('이 거래를 삭제하시겠습니까? 보유 종목이 재계산됩니다.')">
-                                            <i class="fas fa-trash"></i>
-                                        </a>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% else %}
-                    <div class="text-center py-5">
-                        <i class="fas fa-exchange-alt fa-3x text-muted mb-3"></i>
-                        <p class="text-muted">거래 기록이 없습니다.</p>
-                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTradeModal"><i class="fas fa-plus me-1"></i>첫 거래 추가하기</button>
-                    </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
+from flask import Blueprint, render_template, request, redirect, url_for, flash
+from datetime import datetime
+from app import db
+from models import Trade, Holding
+from services.portfolio_service import recalculate_holdings
+from flask_login import current_user, login_required
+import logging
 
-<!-- 거래 추가 모달 -->
-<div class="modal fade" id="addTradeModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header"><h5 class="modal-title"><i class="fas fa-plus me-2"></i>거래 추가</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-            {# 🛠️ Refactor: url_for 경로 수정 #}
-            <form method="POST" action="{{ url_for('trades.add_trade') }}">
-                <div class="modal-body">
-                    <div class="mb-3"><label for="symbol" class="form-label">종목 심볼</label><input type="text" class="form-control" id="symbol" name="symbol" placeholder="예: AAPL, SCHD" required></div>
-                    <div class="mb-3"><label for="trade_type" class="form-label">거래 구분</label><select class="form-select" id="trade_type" name="trade_type" required><option value="">선택하세요</option><option value="buy">매수 (Buy)</option><option value="sell">매도 (Sell)</option></select></div>
-                    <div class="mb-3"><label for="quantity" class="form-label">수량</label><input type="number" class="form-control" id="quantity" name="quantity" min="0.000001" step="any" required></div>
-                    <div class="mb-3"><label for="price" class="form-label">가격 ($)</label><input type="number" class="form-control" id="price" name="price" step="0.01" min="0.01" required></div>
-                    <div class="mb-3"><label for="trade_date" class="form-label">거래일</label><input type="date" class="form-control" id="trade_date" name="trade_date" required></div>
-                </div>
-                <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button><button type="submit" class="btn btn-primary">추가</button></div>
-            </form>
-        </div>
-    </div>
-</div>
-{% endblock %}
+logger = logging.getLogger(__name__)
+trades_bp = Blueprint('trades', __name__)
 
-{% block scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Symbol to uppercase
-    document.getElementById('symbol')?.addEventListener('input', (e) => e.target.value = e.target.value.toUpperCase());
+@trades_bp.route('/')
+@login_required
+def trades():
+    trades = Trade.query.filter_by(user_id=current_user.id).order_by(Trade.trade_date.desc(), Trade.id.desc()).all()
+    return render_template('trades.html', trades=trades)
+
+@trades_bp.route('/add', methods=['POST'])
+@login_required
+def add_trade():
+    symbol = request.form.get('symbol', '').upper().strip()
+    try:
+        trade_type = request.form.get('trade_type')
+        quantity = float(request.form.get('quantity'))
+        price = float(request.form.get('price'))
+        trade_date = datetime.strptime(request.form.get('trade_date'), '%Y-%m-%d').date()
+        
+        if not all([symbol, trade_type, quantity > 0, price > 0]):
+            raise ValueError("모든 필드를 올바르게 입력해주세요.")
+            
+        if trade_type == 'sell':
+            holding = Holding.query.filter_by(user_id=current_user.id, symbol=symbol).first()
+            if not holding or holding.quantity < quantity:
+                flash(f'보유 수량이 부족하여 매도할 수 없습니다. (보유: {holding.quantity if holding else 0})', 'error')
+                return redirect(url_for('trades.trades'))
+                
+        trade = Trade(symbol=symbol, trade_type=trade_type, quantity=quantity, price=price, trade_date=trade_date, user_id=current_user.id)
+        db.session.add(trade)
+        # 🛠️ Fix: recalculate_holdings 호출 후 라우트에서 DB 커밋
+        recalculate_holdings(current_user.id)
+        db.session.commit()
+        
+        flash(f'{symbol} {trade_type.upper()} 거래가 성공적으로 추가되었습니다.', 'success')
+        
+    except (ValueError, TypeError) as e:
+        flash(str(e) or '수량, 가격, 날짜를 올바른 형식으로 입력해주세요.', 'error')
+        db.session.rollback()
+    except Exception as e:
+        logger.error(f"거래 추가 오류: {e}")
+        flash('거래 추가 중 오류가 발생했습니다.', 'error')
+        db.session.rollback()
+        
+    return redirect(url_for('trades.trades'))
+
+@trades_bp.route('/delete/<int:trade_id>')
+@login_required
+def delete_trade(trade_id):
+    trade = Trade.query.filter_by(id=trade_id, user_id=current_user.id).first_or_404()
+    db.session.delete(trade)
+    # 🛠️ Fix: recalculate_holdings 호출 후 라우트에서 DB 커밋
+    recalculate_holdings(current_user.id)
+    db.session.commit()
     
-    // Set default date to today
-    const dateInput = document.getElementById('trade_date');
-    if(dateInput && !dateInput.value) { dateInput.valueAsDate = new Date(); }
-
-    // Live search for trades
-    const searchInput = document.getElementById('tradeSearch');
-    const tableBody = document.getElementById('tradesTableBody');
-    if (searchInput && tableBody) {
-        searchInput.addEventListener('keyup', function() {
-            const searchTerm = searchInput.value.toUpperCase();
-            const rows = tableBody.getElementsByTagName('tr');
-            for (let i = 0; i < rows.length; i++) {
-                const symbolCell = rows[i].querySelector('.trade-symbol');
-                if (symbolCell) {
-                    const symbolText = symbolCell.textContent || symbolCell.innerText;
-                    if (symbolText.toUpperCase().indexOf(searchTerm) > -1) {
-                        rows[i].style.display = "";
-                    } else {
-                        rows[i].style.display = "none";
-                    }
-                }
-            }
-        });
-    }
-});
-</script>
-{% endblock %}
+    flash(f'{trade.symbol} 거래가 삭제되었습니다.', 'success')
+    return redirect(url_for('trades.trades'))
