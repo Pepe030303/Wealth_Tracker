@@ -1,10 +1,8 @@
 # 📄 routes/portfolio.py
-# 🛠️ New File: 포트폴리오 관련 라우트를 분리한 Blueprint
-
 from flask import Blueprint, render_template, request, current_app
 from sqlalchemy import func
-# 🛠️ Fix: 순환 참조를 유발하는 'app' import를 제거
-from app import db, task_queue
+# 🛠️ Refactor: app 대신 extensions에서 db, task_queue 객체를 가져옵니다.
+from extensions import db, task_queue
 from tasks import update_all_dividends_for_user
 from models import Dividend
 from services.portfolio_service import (
@@ -41,7 +39,6 @@ def dividends():
                            dividend_metrics=portfolio_data['dividend_metrics'],
                            monthly_dividend_data=portfolio_data['monthly_dividend_data'],
                            dividend_allocation_data=dividend_allocation_data,
-                           # 🛠️ Fix: app.config 대신 current_app.config 사용
                            tax_rate=current_app.config.get('TAX_RATE', 0.154))
 
 @portfolio_bp.route('/allocation')
