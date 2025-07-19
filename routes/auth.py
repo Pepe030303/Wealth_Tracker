@@ -1,9 +1,8 @@
 # 📄 routes/auth.py
-# 🛠️ New File: 인증 관련 라우트를 분리한 Blueprint
-
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_user, logout_user, current_user, login_required
-from app import db
+# 🛠️ Refactor: app 대신 extensions에서 db 객체를 가져옵니다.
+from extensions import db
 from models import User
 
 auth_bp = Blueprint('auth', __name__)
