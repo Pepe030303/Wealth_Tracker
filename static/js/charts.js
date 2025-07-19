@@ -1,67 +1,165 @@
-// 📄 static/js/charts.js
-// 🛠️ 신규 파일: 공통 차트 생성 로직을 모듈화
+# 📄 static/js/charts.js
+// ✨ New File: 여러 페이지에서 공통으로 사용하는 차트 생성 함수 모음
 
 /**
- * 월별 배당금 바 차트를 생성하는 공통 함수
- * @param {string} canvasId - 차트를 그릴 canvas 요소의 ID
- * @param {object} chartData - 차트 데이터 (labels, datasets 포함)
- * @param {function|null} onClickCallback - 차트 바 클릭 시 실행될 콜백 함수 (인자로 index 전달)
+ * 차트 색상 팔레트를 생성합니다.
+ * @param {number} count - 필요한 색상 수
+ * @returns {string[]} 색상 배열
  */
-function createMonthlyDividendChart(canvasId, chartData, onClickCallback = null) {
-    const ctx = document.getElementById(canvasId)?.getContext('2d');
-    if (!ctx || !chartData || !chartData.datasets || chartData.datasets[0].data.length === 0) {
-        console.warn(`Chart with id #${canvasId} could not be created. Missing canvas or data.`);
-        return null;
+function generateChartColors(count) {
+    const colors = [
+        '#667eea', '#764ba2', '#43e97b', '#38f9d7', '#209cff', '#6a11cb',
+        '#fcb045', '#fd1d1d', '#fce38a', '#e0c3fc', '#8ec5fc', '#f093fb'
+    ];
+    let result = [];
+    for (let i = 0; i < count; i++) {
+        result.push(colors[i % colors.length]);
     }
+    return result;
+}
 
-    // 🛠️ 버그 수정: 플러그인 등록은 각 페이지의 스크립트에서 명시적으로 처리하도록 이관.
-    // Chart.register(ChartDataLabels);
+/**
+ * 월별 배당금 막대 차트를 생성합니다.
+ * @param {CanvasRenderingContext2D} ctx - 차트를 그릴 캔버스 컨텍스트
+ * @param {object} monthlyData - 차트 데이터 (labels, datasets)
+ * @param {function} onClickHandler - 막대 클릭 시 실행될 콜백 함수
+ */
+window.createMonthlyDividendChart = function(ctx, monthlyData, onClickHandler) {
+    if (!ctx || !monthlyData) return;
 
-    const chartInstance = new Chart(ctx, {
-        type: 'bar',
-        data: { 
-            labels: chartData.labels, 
+    window.ChartUtils.requestPlugins(['datalabels'], () => {
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: monthlyData.labels,
+                datasets: [{
+                    label: '월별 배당금',
+                    data: monthlyData.datasets[0].data,
+                    backgroundColor: generateChartColors(12),
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (c) => `$${Number(c.raw).toFixed(2)}`
+                        }
+                    },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'end',
+                        formatter: (value) => value > 0 ? `$${Math.round(value)}` : '',
+                        color: '#adb5bd',
+                        font: { size: 12 }
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: '#868e96' }, grid: { display: false } },
+                    y: { display: false, beginAtZero: true }
+                },
+                onClick: onClickHandler || null
+            }
+        });
+    });
+};
+
+/**
+ * 섹터 비중 트리맵 차트를 생성합니다.
+ * @param {CanvasRenderingContext2D} ctx - 차트를 그릴 캔버스 컨텍스트
+ * @param {object[]} sectorData - 섹터 데이터 배열
+ */
+window.createSectorAllocationChart = function(ctx, sectorData) {
+    if (!ctx || !sectorData) return;
+
+    window.ChartUtils.requestPlugins(['treemap', 'datalabels'], () => {
+        const data = {
             datasets: [{
-                label: '월별 배당금',
-                data: chartData.datasets[0].data,
-                backgroundColor: 'rgba(25, 135, 84, 0.6)',
-                borderColor: 'rgba(25, 135, 84, 1)',
-                borderWidth: 1,
-                borderRadius: 8,
-                borderSkipped: false,
+                tree: sectorData,
+                key: 'value',
+                groups: ['sector'],
+                labels: {
+                    display: true,
+                    color: 'white',
+                    font: { size: 14, weight: 'bold' },
+                    formatter: (c) => [c.raw._data.sector, `$${c.raw.v.toFixed(0)}`]
+                },
+                backgroundColor: (c) => {
+                    const colors = generateChartColors(sectorData.length);
+                    return colors[c.index % colors.length];
+                }
+            }],
+        };
+
+        new Chart(ctx, {
+            type: 'treemap',
+            data: data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: { display: false },
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            title: (c) => c[0].raw._data.sector,
+                            label: (c) => {
+                                const item = c.raw._data;
+                                const total = c.chart.getDatasetMeta(0).total;
+                                const percentage = (item.value / total * 100).toFixed(2);
+                                let details = item.holdings.slice(0, 5).map(h => `  - ${h.symbol}: $${h.value.toFixed(0)}`).join('\n');
+                                if (item.holdings.length > 5) details += '\n  ...';
+                                return [`$${item.value.toFixed(2)} (${percentage}%)`, details];
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    });
+};
+
+/**
+ * 배당금 비중 도넛 차트를 생성합니다.
+ * @param {CanvasRenderingContext2D} ctx - 차트를 그릴 캔버스 컨텍스트
+ * @param {object[]} allocationData - 배당 비중 데이터
+ */
+window.createDividendAllocationChart = function(ctx, allocationData) {
+    if (!ctx || !allocationData) return;
+    
+    const labels = allocationData.map(d => d.symbol);
+    const data = allocationData.map(d => d.value);
+
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: generateChartColors(labels.length),
+                borderColor: '#343a40',
+                borderWidth: 2,
             }]
         },
         options: {
-            responsive: true, 
+            responsive: true,
             maintainAspectRatio: false,
-            layout: { padding: { top: 30 } },
+            cutout: '60%',
             plugins: {
-                legend: { display: false },
+                legend: { position: 'bottom', labels: { color: '#adb5bd', padding: 15 } },
                 tooltip: {
                     callbacks: {
-                        label: (context) => `총액: $${context.parsed.y.toFixed(2)}`
+                        label: (c) => {
+                            const total = c.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                            const percentage = (c.parsed / total * 100).toFixed(2);
+                            return `${c.label}: $${c.parsed.toFixed(2)} (${percentage}%)`;
+                        }
                     }
-                },
-                datalabels: {
-                    anchor: 'end',
-                    align: 'top',
-                    formatter: (value) => value > 0 ? '$' + value.toFixed(2) : null,
-                    color: '#adb5bd',
-                    font: { weight: 'bold' }
-                }
-            },
-            scales: { 
-                x: { grid: { display: false } },
-                y: { display: false, beginAtZero: true }
-            },
-            onClick: (event, elements) => {
-                if (onClickCallback && elements.length > 0) {
-                    const chartElement = elements[0];
-                    onClickCallback(chartElement.index);
                 }
             }
         }
     });
-
-    return chartInstance;
-}
+};
