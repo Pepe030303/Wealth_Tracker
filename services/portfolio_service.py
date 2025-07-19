@@ -2,7 +2,8 @@
 from stock_api import stock_api
 from services import stock_data_service
 from models import Holding, Trade
-# 🛠️ Fix: 순환 참조를 유발하는 `db` import 제거
+# 🛠️ Refactor: 순환 참조를 유발하는 로컬 import 대신 extensions에서 db를 가져옵니다.
+from extensions import db
 from datetime import datetime
 
 def recalculate_holdings(user_id):
@@ -27,11 +28,9 @@ def recalculate_holdings(user_id):
             avg_price = final_cost / final_quantity
             latest_buy_date = max(b['date'] for b in buy_queue) if buy_queue else None
             holding = Holding(symbol=symbol, quantity=final_quantity, purchase_price=avg_price, purchase_date=datetime.combine(latest_buy_date, datetime.min.time()) if latest_buy_date else None, user_id=user_id)
-            # 🛠️ Fix: 서비스 계층에서는 객체를 세션에 추가만 하고, 커밋 책임은 라우트로 이전
-            from app import db
+            # 서비스 계층에서는 객체를 세션에 추가만 하고, 커밋 책임은 라우트가 가집니다.
             db.session.add(holding)
-    # 🛠️ Fix: 커밋 로직 제거
-    # db.session.commit()
+    # 커밋 로직은 호출부(라우트)에서 담당합니다.
 
 def get_processed_holdings_data(user_id):
     holdings = Holding.query.filter_by(user_id=user_id).all()
