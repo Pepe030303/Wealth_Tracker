@@ -1,84 +1,105 @@
 // 📄 static/js/allocation-chart.js
-// 🛠️ Refactor: templates/allocation.html에서 분리된 스크립트
-document.addEventListener('DOMContentLoaded', function() {
+// ✨ New File: 포트폴리오 비중 페이지의 도넛 차트 렌더링 스크립트
+
+document.addEventListener('DOMContentLoaded', () => {
     const container = document.getElementById('allocationPageContainer');
     if (!container) return;
 
-    const allocationData = JSON.parse(container.dataset.allocationData);
-
-    if (allocationData && allocationData.length > 0) {
-        // 총 가치 계산
-        const totalValue = allocationData.reduce((sum, item) => sum + item.value, 0);
+    try {
+        const allocationData = JSON.parse(container.dataset.allocationData || '[]');
         
-        // 차트 데이터 준비
-        const labels = allocationData.map(item => item.symbol);
-        const values = allocationData.map(item => item.value);
-        
-        // 색상 팔레트
-        const colors = [
-            '#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', 
-            '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2'
-        ];
-        
-        // 도넛 차트 생성
-        const ctx = document.getElementById('allocationChart')?.getContext('2d');
-        if (!ctx) return;
-        
-        window.ChartUtils.requestPlugins(['datalabels'], () => {
-            Chart.register(ChartDataLabels);
-
-            const allocationChart = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        data: values,
-                        backgroundColor: colors,
-                        borderColor: '#343a40' // Dark theme background color for borders
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'right'
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const label = context.label || '';
-                                    const value = context.parsed;
-                                    const percentage = (value / totalValue * 100).toFixed(2);
-                                    return ` ${label}: $${value.toFixed(2)} (${percentage}%)`;
-                                }
-                            }
-                        },
-                        datalabels: { // 도넛 차트에서는 라벨을 숨김
-                            display: false
-                        }
-                    }
-                }
+        if (allocationData.length > 0) {
+            // 차트 렌더링
+            window.ChartUtils.requestPlugins(['datalabels'], () => {
+                const allocationCtx = document.getElementById('allocationChart').getContext('2d');
+                createAllocationChart(allocationCtx, allocationData);
             });
-        });
-        
-        // 비중 테이블 생성
-        const tableBody = document.getElementById('allocation-table-body');
-        if (tableBody) {
-            allocationData.forEach((item, index) => {
-                const percentage = (item.value / totalValue * 100).toFixed(2);
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>
-                        <span class="d-inline-block rounded-circle me-2" 
-                              style="width: 12px; height: 12px; background-color: ${colors[index % colors.length]}; vertical-align: middle;"></span>
-                        <strong>${item.symbol}</strong>
-                    </td>
-                    <td class="text-end">$${item.value.toFixed(2)}</td>
-                    <td class="text-end">${percentage}%</td>
-                `;
-                tableBody.appendChild(row);
-            });
+            // 테이블 렌더링
+            renderAllocationTable(allocationData);
         }
+    } catch (e) {
+        console.error("Error parsing or rendering allocation chart data:", e);
     }
 });
+
+function createAllocationChart(ctx, data) {
+    const labels = data.map(item => item.symbol);
+    const values = data.map(item => item.value);
+
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: values,
+                backgroundColor: generateChartColors(values.length),
+                borderColor: '#343a40',
+                borderWidth: 2,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: '#adb5bd',
+                        padding: 15,
+                        font: { size: 14 }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            const value = context.parsed;
+                            const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                            const percentage = ((value / total) * 100).toFixed(2);
+                            return `${label}$${value.toFixed(2)} (${percentage}%)`;
+                        }
+                    }
+                },
+                datalabels: {
+                    display: false // 도넛 차트 위에 직접 라벨 표시 안함
+                }
+            },
+            cutout: '60%'
+        }
+    });
+}
+
+function renderAllocationTable(data) {
+    const tableBody = document.getElementById('allocation-table-body');
+    if (!tableBody) return;
+
+    const totalValue = data.reduce((sum, item) => sum + item.value, 0);
+    tableBody.innerHTML = ''; // 기존 내용 초기화
+
+    data.forEach(item => {
+        const percentage = totalValue > 0 ? ((item.value / totalValue) * 100).toFixed(2) : 0;
+        const row = `
+            <tr>
+                <td><strong>${item.symbol}</strong></td>
+                <td class="text-end">$${item.value.toFixed(2)}</td>
+                <td class="text-end">${percentage}%</td>
+            </tr>
+        `;
+        tableBody.innerHTML += row;
+    });
+}
+
+function generateChartColors(count) {
+    const colors = [
+        '#667eea', '#764ba2', '#43e97b', '#38f9d7', '#209cff', '#6a11cb',
+        '#fcb045', '#fd1d1d', '#fce38a', '#e0c3fc', '#8ec5fc', '#f093fb'
+    ];
+    let result = [];
+    for (let i = 0; i < count; i++) {
+        result.push(colors[i % colors.length]);
+    }
+    return result;
+}

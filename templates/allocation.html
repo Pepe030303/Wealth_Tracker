@@ -4,7 +4,6 @@
 {% block title %}포트폴리오 비중 - Wealth Tracker{% endblock %}
 
 {% block content %}
-{# 🛠️ Refactor: 데이터 전달을 위한 컨테이너 div 추가 #}
 <div id="allocationPageContainer" data-allocation-data="{{ allocation_data|tojson }}">
     <div class="row">
         <div class="col-12">
@@ -71,7 +70,8 @@
                     <div class="text-center py-5">
                         <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
                         <p class="text-muted">포트폴리오 데이터가 없습니다.</p>
-                        <a href="{{ url_for('main.trades') }}" class="btn btn-primary">
+                        {# 🛠️ Fix: url_for 경로를 'main.trades'에서 'trades.trades'로 수정 #}
+                        <a href="{{ url_for('trades.trades') }}" class="btn btn-primary">
                             <i class="fas fa-plus me-1"></i>거래 추가하기
                         </a>
                     </div>
@@ -84,6 +84,7 @@
 {% endblock %}
 
 {% block scripts %}
-{# 🛠️ Refactor: 인라인 스크립트를 외부 파일로 분리 #}
+{# 🛠️ Fix: charts.js를 먼저 로드하도록 추가 #}
+<script src="{{ url_for('static', filename='js/charts.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/allocation-chart.js') }}" defer></script>
 {% endblock %}

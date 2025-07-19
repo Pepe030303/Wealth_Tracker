@@ -5,9 +5,9 @@
 {% block title %}배당금 분석 - Wealth Tracker{% endblock %}
 
 {% block content %}
-{# 🛠️ Refactor: get_dividend_allocation_data() 함수 호출 대신 미리 계산된 변수 사용 #}
+{# 🛠️ Fix: 변수 이름을 allocation_data에서 dividend_allocation_data로 명확하게 변경 #}
 <div id="dividendAnalysisContainer"
-     data-allocation-data="{{ dividend_allocation_data|tojson }}"
+     data-dividend-allocation-data="{{ dividend_allocation_data|tojson }}"
      data-monthly-data="{{ monthly_dividend_data|tojson }}"
      data-tax-rate="{{ tax_rate }}">
 
@@ -56,9 +56,7 @@
             <div class="row g-3">
                 {% for symbol, metrics in dividend_metrics %}
                 <div class="col-12 col-md-6 col-lg-4">
-                    <div class="card h-100 stock-card-interactive" style="cursor: pointer;" 
-                         data-symbol="{{ symbol }}" 
-                         data-history='{{ metrics.adjusted_history|tojson }}'>
+                    <div class="card h-100">
                         <div class="card-body p-3">
                             <div class="d-flex justify-content-between mb-2">
                                 <div class="d-flex align-items-center">
@@ -104,7 +102,6 @@
                             </div>
                         </div>
                     </div>
-                    <div id="detail-{{ symbol }}" class="dividend-detail-container collapse mt-2"></div>
                 </div>
                 {% endfor %}
             </div>
@@ -144,6 +141,7 @@
 {% endblock %}
 
 {% block scripts %}
+{# 🛠️ Fix: dividend-analysis.js를 로드하도록 수정 #}
 <script src="{{ url_for('static', filename='js/charts.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/dividend-analysis.js') }}" defer></script>
 {% endblock %}
