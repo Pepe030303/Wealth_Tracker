@@ -1,9 +1,9 @@
 # 📄 tasks.py
-
 import yfinance as yf
 import pandas as pd
-# 🛠️ Fix: 'app' 인스턴스 대신 'create_app' 팩토리 함수와 'db' 객체를 import
-from app import db, create_app
+# 🛠️ Refactor: 앱 컨텍스트 생성을 위해 create_app을, DB 객체 사용을 위해 db를 가져옵니다.
+from app import create_app
+from extensions import db
 from models import Holding, Dividend, DividendUpdateCache, Trade
 import logging
 from datetime import datetime, timedelta
@@ -40,7 +40,6 @@ def update_all_dividends_for_user(user_id):
     사용자의 전체 보유 종목에 대해, '배당락일' 기준 보유 수량을 계산하여
     실제 받을 배당금을 'Dividend' 테이블에 기록하는 백그라운드 작업.
     """
-    # 🛠️ Fix: 백그라운드 작업 내에서 직접 앱 컨텍스트를 생성하여 사용
     app = create_app()
     with app.app_context():
         try:
