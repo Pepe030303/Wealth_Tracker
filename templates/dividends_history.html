@@ -48,7 +48,6 @@
                     <thead>
                         <tr>
                             <th>종목</th>
-                            {# [개선] 배당락일 컬럼 추가 #}
                             <th>배당락일 (Ex-Date)</th>
                             <th>지급일 (Pay Date)</th>
                             <th class="text-end">주당 배당금</th>
@@ -87,19 +86,20 @@
                 <nav>
                     <ul class="pagination mb-0">
                         <li class="page-item {% if not dividends_pagination.has_prev %}disabled{% endif %}">
-                            <a class="page-link" href="{{ url_for('main.dividends_history', page=dividends_pagination.prev_num) }}">이전</a>
+                            {# 🛠️ Fix: url_for 경로를 'main.dividends_history'에서 'portfolio.dividends_history'로 수정 #}
+                            <a class="page-link" href="{{ url_for('portfolio.dividends_history', page=dividends_pagination.prev_num) }}">이전</a>
                         </li>
                         {% for page_num in dividends_pagination.iter_pages() %}
                             {% if page_num %}
                                 <li class="page-item {% if page_num == dividends_pagination.page %}active{% endif %}">
-                                    <a class="page-link" href="{{ url_for('main.dividends_history', page=page_num) }}">{{ page_num }}</a>
+                                    <a class="page-link" href="{{ url_for('portfolio.dividends_history', page=page_num) }}">{{ page_num }}</a>
                                 </li>
                             {% else %}
                                 <li class="page-item disabled"><span class="page-link">...</span></li>
                             {% endif %}
                         {% endfor %}
                         <li class="page-item {% if not dividends_pagination.has_next %}disabled{% endif %}">
-                            <a class="page-link" href="{{ url_for('main.dividends_history', page=dividends_pagination.next_num) }}">다음</a>
+                            <a class="page-link" href="{{ url_for('portfolio.dividends_history', page=dividends_pagination.next_num) }}">다음</a>
                         </li>
                     </ul>
                 </nav>
