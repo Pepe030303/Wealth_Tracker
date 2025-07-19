@@ -2,12 +2,12 @@
 from stock_api import stock_api
 from services import stock_data_service
 from models import Holding, Trade
-from app import db
+# 🛠️ Fix: 순환 참조를 유발하는 `db` import 제거
 from datetime import datetime
 
 def recalculate_holdings(user_id):
     Holding.query.filter_by(user_id=user_id).delete()
-    symbols = db.session.query(Trade.symbol).filter_by(user_id=user_id).distinct().all()
+    symbols = Trade.query.with_entities(Trade.symbol).filter_by(user_id=user_id).distinct().all()
     for (symbol,) in symbols:
         trades = Trade.query.filter_by(symbol=symbol, user_id=user_id).order_by(Trade.trade_date, Trade.id).all()
         buy_queue = []
@@ -27,8 +27,11 @@ def recalculate_holdings(user_id):
             avg_price = final_cost / final_quantity
             latest_buy_date = max(b['date'] for b in buy_queue) if buy_queue else None
             holding = Holding(symbol=symbol, quantity=final_quantity, purchase_price=avg_price, purchase_date=datetime.combine(latest_buy_date, datetime.min.time()) if latest_buy_date else None, user_id=user_id)
+            # 🛠️ Fix: 서비스 계층에서는 객체를 세션에 추가만 하고, 커밋 책임은 라우트로 이전
+            from app import db
             db.session.add(holding)
-    db.session.commit()
+    # 🛠️ Fix: 커밋 로직 제거
+    # db.session.commit()
 
 def get_processed_holdings_data(user_id):
     holdings = Holding.query.filter_by(user_id=user_id).all()
@@ -112,7 +115,6 @@ def get_portfolio_analysis_data(user_id):
     
     return {"holdings": holdings, "summary": summary_data, "sector_allocation": sector_allocation, "dividend_metrics": sorted_dividend_metrics, "monthly_dividend_data": monthly_dividend_data}
 
-# 🛠️ 추가: /allocation 페이지를 위한 데이터 제공 함수
 def get_portfolio_allocation_data(user_id):
     """보유 종목의 자산 배분(비중) 데이터를 계산하여 반환합니다."""
     holdings = Holding.query.filter_by(user_id=user_id).all()
@@ -132,6 +134,9 @@ def get_portfolio_allocation_data(user_id):
             'value': current_value,
         })
     
-    # 평가금액 기준으로 내림차순 정렬
     allocation_data.sort(key=lambda x: x['value'], reverse=True)
     return allocation_data
+
+def get_dividend_allocation_data_from_metrics(dividend_metrics):
+    """주어진 배당 지표에서 배당 비중 차트용 데이터를 추출합니다."""
+    return [{'symbol': item[0], 'value': item[1]['expected_annual_dividend']} for item in dividend_metrics if item[1].get('expected_annual_dividend', 0) > 0]
