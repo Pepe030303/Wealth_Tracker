@@ -9,6 +9,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_login import LoginManager
 import redis
 from rq import Queue
+from whitenoise import WhiteNoise # 🛠️ 추가: WhiteNoise 임포트
 
 logging.basicConfig(level=logging.INFO)
 
@@ -16,15 +17,20 @@ class Base(DeclarativeBase): pass
 db = SQLAlchemy(model_class=Base)
 login_manager = LoginManager()
 
-# 🛠️ [버그 수정] 배포 환경에서 static, templates 폴더를 명시적으로 지정
-# Flask 앱이 어떤 환경에서 실행되더라도 정적 파일과 템플릿의 위치를 확실하게 찾도록 경로를 지정합니다.
-# 이 변경으로 인해 Render.com에서 CSS, JS 파일이 0바이트로 전송되던 문제가 해결됩니다.
+# Flask 앱 생성 시 static, templates 폴더 경로 명시 (이전 수정사항 유지)
 app = Flask(__name__,
             static_folder='static',
             template_folder='templates')
 
 app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key-for-local-testing")
+
+# 🛠️ [핵심 수정] WhiteNoise 미들웨어를 적용하여 정적 파일 서빙 문제를 해결합니다.
+# Gunicorn과 같은 프로덕션 WSGI 서버 환경에서 Flask 앱이 직접 static 파일들을
+# 안정적으로 제공할 수 있도록 app.wsgi_app을 WhiteNoise로 감쌉니다.
+# ProxyFix는 WhiteNoise 다음에 적용하는 것이 일반적입니다.
+app.wsgi_app = WhiteNoise(app.wsgi_app, root='static/')
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
 
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///investment.db")
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_recycle": 280, "pool_pre_ping": True}
