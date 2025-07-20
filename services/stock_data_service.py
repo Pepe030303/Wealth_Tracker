@@ -1,12 +1,11 @@
 # 📄 services/stock_data_service.py
-# 🛠️ 신규 파일: utils.py에서 종목 데이터 관련 비즈니스 로직을 분리하여 생성
-
 from datetime import datetime, timedelta
 import logging
 import yfinance as yf
 import pandas as pd
 import requests
-from utils import get_from_redis_cache, set_to_redis_cache, MANUAL_OVERRIDES
+# 🛠️ 제거: MANUAL_OVERRIDES 임포트 제거
+from utils import get_from_redis_cache, set_to_redis_cache
 
 logger = logging.getLogger(__name__)
 
@@ -14,37 +13,37 @@ def calculate_dividend_metrics(holdings, price_data_map):
     """
     보유 종목 목록을 기반으로 각 종목의 배당 관련 지표를 계산합니다.
     - 연간 예상 배당금, 배당수익률, 주당 배당금을 포함합니다.
-    - 수동 재정의 값을 우선 적용하고, Redis 캐시를 활용합니다.
+    - Redis 캐시를 활용합니다.
     """
     dividend_metrics = {}
     for h in holdings:
         symbol = h.symbol.upper()
         
-        if symbol in MANUAL_OVERRIDES and 'trailingAnnualDividendRate' in MANUAL_OVERRIDES[symbol]:
-            annual_dps = MANUAL_OVERRIDES[symbol]['trailingAnnualDividendRate']
-            logger.info(f"({symbol})에 대해 수동 재정의된 배당률 ${annual_dps} 적용.")
+        # 🛠️ 제거: 수동 재정의 값을 확인하는 로직 전체 제거
+        # if symbol in MANUAL_OVERRIDES and 'trailingAnnualDividendRate' in MANUAL_OVERRIDES[symbol]: ...
+        # else: ... (else 블록의 내용만 남기고 un-indent)
+
+        cache_key = f"dividend_metrics:{symbol}"
+        annual_dps = 0
+        if cached_data := get_from_redis_cache(cache_key):
+            annual_dps = cached_data.get('annual_dps', 0)
         else:
-            cache_key = f"dividend_metrics:{symbol}"
-            annual_dps = 0
-            if cached_data := get_from_redis_cache(cache_key):
-                annual_dps = cached_data.get('annual_dps', 0)
-            else:
-                try:
-                    info = yf.Ticker(symbol).info
-                    annual_dps = float(info.get('trailingAnnualDividendRate') or info.get('dividendRate') or 0)
-                    if annual_dps == 0 and info.get('yield'):
-                        price_data = price_data_map.get(symbol)
-                        current_price = price_data.get('price') if isinstance(price_data, dict) else (getattr(price_data, 'current_price', 0))
-                        if current_price:
-                            annual_dps = float(info['yield']) * current_price
-                    if annual_dps > 0:
-                        set_to_redis_cache(cache_key, {'annual_dps': annual_dps})
-                except (requests.exceptions.HTTPError, KeyError, TypeError, ValueError) as e:
-                    logger.warning(f"배당 지표 계산/파싱 실패 ({symbol}): {e}")
-                    continue
-                except Exception as e:
-                    logger.error(f"배당 지표 계산 중 예상치 못한 오류 ({symbol}): {e}")
-                    continue
+            try:
+                info = yf.Ticker(symbol).info
+                annual_dps = float(info.get('trailingAnnualDividendRate') or info.get('dividendRate') or 0)
+                if annual_dps == 0 and info.get('yield'):
+                    price_data = price_data_map.get(symbol)
+                    current_price = price_data.get('price') if isinstance(price_data, dict) else (getattr(price_data, 'current_price', 0))
+                    if current_price:
+                        annual_dps = float(info['yield']) * current_price
+                if annual_dps > 0:
+                    set_to_redis_cache(cache_key, {'annual_dps': annual_dps})
+            except (requests.exceptions.HTTPError, KeyError, TypeError, ValueError) as e:
+                logger.warning(f"배당 지표 계산/파싱 실패 ({symbol}): {e}")
+                continue
+            except Exception as e:
+                logger.error(f"배당 지표 계산 중 예상치 못한 오류 ({symbol}): {e}")
+                continue
 
         if annual_dps > 0:
             price_data = price_data_map.get(symbol)
@@ -158,4 +157,4 @@ def get_dividend_payout_schedule(symbol):
 
     result = {'payouts': payouts, 'months': month_names}
     set_to_redis_cache(cache_key, result)
-    return result
+    return result```

@@ -1,65 +1,67 @@
-// 📄 static/js/charts.js
-// 🛠️ 신규 파일: 공통 차트 생성 로직을 모듈화
+/* 📄 static/js/charts.js */
+// 🛠️ 버그 수정: 비어있던 파일에 공통 차트 생성 함수 로직 추가
 
 /**
- * 월별 배당금 바 차트를 생성하는 공통 함수
- * @param {string} canvasId - 차트를 그릴 canvas 요소의 ID
- * @param {object} chartData - 차트 데이터 (labels, datasets 포함)
- * @param {function|null} onClickCallback - 차트 바 클릭 시 실행될 콜백 함수 (인자로 index 전달)
+ * 월별 배당금 막대 차트를 생성하고 지정된 캔버스에 렌더링합니다.
+ * @param {string} canvasId - 차트를 렌더링할 캔버스 요소의 ID
+ * @param {object} monthlyData - 차트 데이터 (labels, datasets, detailed_data 포함)
+ * @param {object} [options={}] - 추가 차트 옵션 (예: onClick 핸들러)
+ * @returns {Chart} 생성된 Chart.js 인스턴스
  */
-function createMonthlyDividendChart(canvasId, chartData, onClickCallback = null) {
+function createMonthlyDividendChart(canvasId, monthlyData, options = {}) {
     const ctx = document.getElementById(canvasId)?.getContext('2d');
-    if (!ctx || !chartData || !chartData.datasets || chartData.datasets[0].data.length === 0) {
-        console.warn(`Chart with id #${canvasId} could not be created. Missing canvas or data.`);
-        return null;
+    if (!ctx) return null;
+
+    // 차트가 이미 존재하면 파괴하여 중복 생성을 방지
+    if (Chart.getChart(canvasId)) {
+        Chart.getChart(canvasId).destroy();
     }
-
-    // 🛠️ 버그 수정: 플러그인 등록은 각 페이지의 스크립트에서 명시적으로 처리하도록 이관.
-    // Chart.register(ChartDataLabels);
-
+    
     const chartInstance = new Chart(ctx, {
         type: 'bar',
-        data: { 
-            labels: chartData.labels, 
+        data: {
+            labels: monthlyData.labels,
             datasets: [{
                 label: '월별 배당금',
-                data: chartData.datasets[0].data,
+                data: monthlyData.datasets[0].data,
                 backgroundColor: 'rgba(25, 135, 84, 0.6)',
                 borderColor: 'rgba(25, 135, 84, 1)',
                 borderWidth: 1,
-                borderRadius: 8,
-                borderSkipped: false,
+                borderRadius: 5,
+                barThickness: 'flex',
+                maxBarThickness: 50
             }]
         },
         options: {
-            responsive: true, 
+            responsive: true,
             maintainAspectRatio: false,
-            layout: { padding: { top: 30 } },
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
             plugins: {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        label: (context) => `총액: $${context.parsed.y.toFixed(2)}`
+                        label: function(context) {
+                            return ` 총액: $${context.parsed.y.toFixed(2)}`;
+                        }
                     }
                 },
                 datalabels: {
                     anchor: 'end',
-                    align: 'top',
-                    formatter: (value) => value > 0 ? '$' + value.toFixed(2) : null,
+                    align: 'end',
+                    formatter: (value) => value > 0 ? '$' + value.toFixed(0) : '',
                     color: '#adb5bd',
                     font: { weight: 'bold' }
                 }
             },
-            scales: { 
+            scales: {
                 x: { grid: { display: false } },
                 y: { display: false, beginAtZero: true }
             },
-            onClick: (event, elements) => {
-                if (onClickCallback && elements.length > 0) {
-                    const chartElement = elements[0];
-                    onClickCallback(chartElement.index);
-                }
-            }
+            // 외부에서 전달된 옵션 병합 (예: onClick)
+            ...options
         }
     });
 
