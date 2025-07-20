@@ -1,5 +1,5 @@
 /* 📄 static/js/dividend-analysis.js */
-// 🛠️ 신규 파일: dividends.html의 스크립트 로직을 분리
+// 🛠️ 신규 파일: 누락되었던 파일 생성
 
 document.addEventListener('DOMContentLoaded', function() {
     const container = document.getElementById('dividendAnalysisContainer');
@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const taxRate = parseFloat(container.dataset.taxRate);
 
     let isTaxApplied = false;
+    let monthlyChart = null; // 차트 인스턴스를 저장할 변수
 
     // 필요한 플러그인 로드 후 차트 및 이벤트 리스너 초기화
     window.ChartUtils.requestPlugins(['datalabels'], () => {
@@ -18,7 +19,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // 월별 배당 차트 생성
         if (monthlyData && monthlyData.datasets && monthlyData.datasets[0].data.some(d => d > 0)) {
-            const monthlyChart = createMonthlyDividendChart('monthlyDividendChart', monthlyData, {
+            monthlyChart = createMonthlyDividendChart('monthlyDividendChart', monthlyData, {
                 onClick: (event, elements, chart) => {
                     if (elements.length > 0) {
                         const monthIndex = elements[0].index;
@@ -32,11 +33,12 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // 차트 외부 클릭 시 활성 요소 초기화
             document.addEventListener('click', (event) => {
-                if (event.target.id !== 'monthlyDividendChart') {
+                const canvas = document.getElementById('monthlyDividendChart');
+                if (monthlyChart && canvas && !canvas.contains(event.target)) {
                     monthlyChart.setActiveElements([]);
                     monthlyChart.update();
                 }
-            });
+            }, true); // Use capture phase to ensure it runs
         }
 
         // 배당 비중 도넛 차트 생성 (모달)
@@ -55,16 +57,20 @@ document.addEventListener('DOMContentLoaded', function() {
     function initializeEventListeners() {
         // 세금 토글 스위치
         const taxToggle = document.getElementById('taxToggleSwitch');
-        taxToggle.addEventListener('change', (e) => {
-            isTaxApplied = e.target.checked;
-            updateTaxDisplay();
-        });
+        if(taxToggle) {
+            taxToggle.addEventListener('change', (e) => {
+                isTaxApplied = e.target.checked;
+                updateTaxDisplay();
+            });
+        }
 
         // 월별 상세 정보 닫기 버튼
         const closeMonthlyDetailBtn = document.getElementById('closeMonthlyDetail');
-        closeMonthlyDetailBtn.addEventListener('click', () => {
-            document.getElementById('monthlyDetail').classList.add('d-none');
-        });
+        if(closeMonthlyDetailBtn) {
+            closeMonthlyDetailBtn.addEventListener('click', () => {
+                document.getElementById('monthlyDetail').classList.add('d-none');
+            });
+        }
 
         // 종목 카드 클릭 이벤트 (배당 성장률 차트 토글)
         document.querySelectorAll('.stock-card-interactive').forEach(card => {
@@ -86,7 +92,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const valueToShow = pretaxValue * taxMultiplier;
             el.textContent = `$${valueToShow.toFixed(2)}`;
         });
-        document.getElementById('taxToggleLabel').textContent = isTaxApplied ? '세후' : '세전';
+        const taxLabel = document.getElementById('taxToggleLabel');
+        if (taxLabel) {
+            taxLabel.textContent = isTaxApplied ? '세후' : '세전';
+        }
     }
 
     /**
@@ -97,6 +106,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const detailContainer = document.getElementById('monthlyDetail');
         const detailTitle = document.getElementById('monthlyDetailTitle');
         const detailContent = document.getElementById('monthlyDetailContent');
+
+        if (!detailContainer || !detailTitle || !detailContent) return;
 
         const monthName = monthlyData.labels[monthIndex];
         const items = monthlyData.detailed_data[monthIndex];
@@ -136,7 +147,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const ctx = document.getElementById(canvasId)?.getContext('2d');
         if (!ctx) return;
 
-        // 차트가 이미 생성되었다면 파괴
         if (Chart.getChart(canvasId)) {
             Chart.getChart(canvasId).destroy();
         }
@@ -181,10 +191,11 @@ document.addEventListener('DOMContentLoaded', function() {
      */
     function toggleDividendHistoryChart(symbol, historyData) {
         const detailContainer = document.getElementById(`detail-${symbol}`);
-        const isCollapsed = detailContainer.classList.contains('collapse');
+        if (!detailContainer) return;
+
+        const isCollapsed = !detailContainer.classList.contains('show');
 
         if (isCollapsed) {
-            // 차트 생성
             if (historyData && historyData.length > 0) {
                 const years = {};
                 historyData.forEach(item => {
@@ -220,8 +231,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
-        // 부트스트랩의 Collapse 인스턴스를 사용하여 토글
         const collapse = bootstrap.Collapse.getOrCreateInstance(detailContainer);
         collapse.toggle();
     }
-});```
+});
