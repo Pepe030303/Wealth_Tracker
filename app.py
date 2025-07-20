@@ -16,7 +16,13 @@ class Base(DeclarativeBase): pass
 db = SQLAlchemy(model_class=Base)
 login_manager = LoginManager()
 
-app = Flask(__name__)
+# 🛠️ [버그 수정] 배포 환경에서 static, templates 폴더를 명시적으로 지정
+# Flask 앱이 어떤 환경에서 실행되더라도 정적 파일과 템플릿의 위치를 확실하게 찾도록 경로를 지정합니다.
+# 이 변경으로 인해 Render.com에서 CSS, JS 파일이 0바이트로 전송되던 문제가 해결됩니다.
+app = Flask(__name__,
+            static_folder='static',
+            template_folder='templates')
+
 app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key-for-local-testing")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
