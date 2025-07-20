@@ -157,4 +157,4 @@ def get_dividend_payout_schedule(symbol):
 
     result = {'payouts': payouts, 'months': month_names}
     set_to_redis_cache(cache_key, result)
-    return result```
+    return result
