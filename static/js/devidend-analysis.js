@@ -1,170 +1,227 @@
-// 📄 static/js/dividend-analysis.js
-document.addEventListener('DOMContentLoaded', function () {
-    // 🛠️ 버그 수정: 이 페이지에서 필요한 'datalabels' 플러그인을 명시적으로 요청
+/* 📄 static/js/dividend-analysis.js */
+// 🛠️ 신규 파일: dividends.html의 스크립트 로직을 분리
+
+document.addEventListener('DOMContentLoaded', function() {
+    const container = document.getElementById('dividendAnalysisContainer');
+    if (!container) return;
+
+    // 데이터셋 가져오기
+    const allocationData = JSON.parse(container.dataset.allocationData);
+    const monthlyData = JSON.parse(container.dataset.monthlyData);
+    const taxRate = parseFloat(container.dataset.taxRate);
+
+    let isTaxApplied = false;
+
+    // 필요한 플러그인 로드 후 차트 및 이벤트 리스너 초기화
     window.ChartUtils.requestPlugins(['datalabels'], () => {
-        // 이 콜백은 datalabels 플러그인이 로드된 후 실행됩니다.
-        Chart.register(ChartDataLabels); // 플러그인 등록
+        Chart.register(ChartDataLabels);
 
-        const analysisContainer = document.getElementById('dividendAnalysisContainer');
-        if (!analysisContainer) return;
-
-        const originalAllocationData = JSON.parse(analysisContainer.dataset.allocationData);
-        const originalMonthlyData = JSON.parse(analysisContainer.dataset.monthlyData);
-        const originalDetailedData = originalMonthlyData.detailed_data || {};
-        const TAX_RATE = parseFloat(analysisContainer.dataset.taxRate);
-
-        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-        tooltipTriggerList.map(function (tooltipTriggerEl) { return new bootstrap.Tooltip(tooltipTriggerEl); });
-        
-        const taxToggle = document.getElementById('taxToggleSwitch');
-        const taxToggleLabel = document.getElementById('taxToggleLabel');
-        
-        let allocationChart;
-        const monthlyChart = createMonthlyDividendChart('monthlyDividendChart', originalMonthlyData, (index) => {
-            renderMonthlyDetails(index);
-        });
-
-        function updateDisplayByTaxMode(isPostTax) {
-            const factor = isPostTax ? (1 - TAX_RATE) : 1;
-            document.querySelectorAll('.tax-value').forEach(el => {
-                el.textContent = `$${(parseFloat(el.dataset.pretaxValue) * factor).toFixed(2)}`;
+        // 월별 배당 차트 생성
+        if (monthlyData && monthlyData.datasets && monthlyData.datasets[0].data.some(d => d > 0)) {
+            const monthlyChart = createMonthlyDividendChart('monthlyDividendChart', monthlyData, {
+                onClick: (event, elements, chart) => {
+                    if (elements.length > 0) {
+                        const monthIndex = elements[0].index;
+                        displayMonthlyDetail(monthIndex);
+                        // 선택된 막대 강조
+                        chart.setActiveElements([{ datasetIndex: 0, index: monthIndex }]);
+                        chart.update();
+                    }
+                }
             });
-            if (allocationChart) {
-                allocationChart.data.datasets[0].data = originalAllocationData.map(item => item.value * factor);
-                allocationChart.update();
-            }
-            if (monthlyChart) {
-                const originalData = originalMonthlyData.datasets[0].data;
-                monthlyChart.data.datasets[0].data = originalData.map(val => val * factor);
-                monthlyChart.update();
-            }
-            taxToggleLabel.textContent = isPostTax ? '세후' : '세전';
+            
+            // 차트 외부 클릭 시 활성 요소 초기화
+            document.addEventListener('click', (event) => {
+                if (event.target.id !== 'monthlyDividendChart') {
+                    monthlyChart.setActiveElements([]);
+                    monthlyChart.update();
+                }
+            });
         }
 
-        const savedTaxMode = localStorage.getItem('taxMode');
-        if (savedTaxMode === 'post-tax') taxToggle.checked = true;
-        updateDisplayByTaxMode(taxToggle.checked);
-
-        taxToggle.addEventListener('change', () => {
-            const isPostTax = taxToggle.checked;
-            localStorage.setItem('taxMode', isPostTax ? 'post-tax' : 'pre-tax');
-            updateDisplayByTaxMode(isPostTax);
-            const monthlyDetailContainer = document.getElementById('monthlyDetail');
-            if (!monthlyDetailContainer.classList.contains('d-none')) {
-                const currentIndex = parseInt(monthlyDetailContainer.dataset.monthIndex);
-                if (!isNaN(currentIndex)) renderMonthlyDetails(currentIndex);
-            }
-        });
-
+        // 배당 비중 도넛 차트 생성 (모달)
         const allocationModal = document.getElementById('allocationModal');
         allocationModal.addEventListener('shown.bs.modal', () => {
-            if (allocationChart) {
-                updateDisplayByTaxMode(taxToggle.checked);
-                return;
-            }
-            const allocationCtx = document.getElementById('dividendAllocationChart')?.getContext('2d');
-            if (allocationCtx && originalAllocationData && originalAllocationData.length > 0) {
-                allocationChart = new Chart(allocationCtx, {
-                    type: 'doughnut', data: { labels: originalAllocationData.map(i => i.symbol), datasets: [{ data: originalAllocationData.map(i => i.value), backgroundColor: ['#0d6efd', '#6c757d', '#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2'], borderColor: '#343a40' }] },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' }, datalabels: { display: false }, tooltip: { callbacks: { label: function(c) { const total = c.chart.data.datasets[0].data.reduce((s, v) => s + v, 0); return ` ${c.label}: $${c.parsed.toFixed(2)} (${(c.parsed / total * 100).toFixed(2)}%)`; } } } } }
-                });
-                updateDisplayByTaxMode(taxToggle.checked);
-            }
-        });
+            createDividendAllocationChart('dividendAllocationChart', allocationData);
+        }, { once: true });
 
-        const monthlyDetailContainer = document.getElementById('monthlyDetail');
-        const monthlyDetailTitle = document.getElementById('monthlyDetailTitle');
-        const monthlyDetailContent = document.getElementById('monthlyDetailContent');
-        const closeButton = document.getElementById('closeMonthlyDetail');
-        
-        function renderMonthlyDetails(index) {
-            monthlyDetailContainer.dataset.monthIndex = index;
-            const factor = taxToggle.checked ? (1 - TAX_RATE) : 1;
-            let dataForMonth = originalDetailedData[index] || [];
-            if (dataForMonth.length === 0) { monthlyDetailContainer.classList.add('d-none'); return; }
-            
-            if (monthlyChart) {
-                const activeColor = 'rgba(25, 135, 84, 1)';
-                const defaultColor = 'rgba(25, 135, 84, 0.6)';
-                monthlyChart.data.datasets[0].backgroundColor = monthlyChart.data.labels.map((_, i) => i === index ? activeColor : defaultColor);
-                monthlyChart.update('none');
-            }
-
-            dataForMonth.sort((a, b) => new Date(a.ex_dividend_date) - new Date(b.ex_dividend_date));
-            const totalForMonth = dataForMonth.reduce((s, i) => s + i.amount, 0) * factor;
-            monthlyDetailTitle.innerHTML = `${originalMonthlyData.labels[index]} 배당 상세 <span class="text-success fw-bold ms-3">$${totalForMonth.toFixed(2)}</span>`;
-            monthlyDetailContent.innerHTML = '';
-            dataForMonth.forEach(item => {
-                const logoUrl = item.profile?.logo_url || `https://via.placeholder.com/32/cccccc/FFFFFF?text=${item.symbol[0]}`;
-                const exDay = new Date(item.ex_dividend_date).getDate();
-                const itemHtml = `<div class="list-group-item d-flex align-items-center p-2 bg-transparent"><span class="badge bg-secondary-subtle text-secondary-emphasis rounded-pill me-3 p-2" style="width: 2.5rem; height: 2.5rem; display: flex; align-items-center; justify-content: center; font-size: 1rem;">${exDay}</span><img src="${logoUrl}" class="stock-logo me-3" alt="${item.symbol} logo" loading="lazy" onerror="this.onerror=null; this.src='https://via.placeholder.com/32/cccccc/FFFFFF?text=${item.symbol[0]}';"><div class="flex-grow-1"><div class="d-flex justify-content-between"><strong class="mb-0">${item.symbol}</strong><strong class="text-success fs-5 ms-3">$${(item.amount*factor).toFixed(2)}</strong></div><div class="d-flex justify-content-between"><small class="company-name text-muted">${item.profile?.name || ''}</small><small class="text-muted text-nowrap">${item.quantity.toFixed(2)}주 @ $${(item.dps_per_payout*factor).toFixed(4)}</small></div></div></div>`;
-                monthlyDetailContent.innerHTML += itemHtml;
-            });
-            monthlyDetailContainer.classList.remove('d-none');
-            monthlyDetailContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-
-        closeButton.addEventListener('click', () => { 
-            monthlyDetailContainer.classList.add('d-none');
-            if (monthlyChart) {
-                monthlyChart.data.datasets[0].backgroundColor = 'rgba(25, 135, 84, 0.6)';
-                monthlyChart.update('none');
-            }
-        });
-
-        let activeDetailChart = null;
-        let activeDetailSymbol = null;
-        
-        document.querySelectorAll('.stock-card-interactive').forEach(card => {
-            card.addEventListener('click', (e) => {
-                const symbol = card.dataset.symbol;
-                const historyData = JSON.parse(card.dataset.history);
-                const detailContainer = document.getElementById(`detail-${symbol}`);
-
-                if (activeDetailSymbol && activeDetailSymbol !== symbol) {
-                    const lastContainer = document.getElementById(`detail-${activeDetailSymbol}`);
-                    if (lastContainer) new bootstrap.Collapse(lastContainer, {toggle: false}).hide();
-                    if (activeDetailChart) activeDetailChart.destroy();
-                }
-
-                const bsCollapse = new bootstrap.Collapse(detailContainer, { toggle: false });
-                bsCollapse.toggle();
-
-                if (detailContainer.classList.contains('show')) {
-                    activeDetailSymbol = symbol;
-                    renderStockDetailChart(detailContainer, symbol, historyData);
-                } else {
-                    activeDetailSymbol = null;
-                    if(activeDetailChart) activeDetailChart.destroy();
-                }
-            });
-        });
-
-        function renderStockDetailChart(container, symbol, history) {
-            if (!history || history.length === 0) {
-                container.innerHTML = `<div class="p-3 text-center text-muted">배당 이력 데이터가 없습니다.</div>`;
-                return;
-            }
-
-            const df = {};
-            history.forEach(item => {
-                const year = new Date(item.date).getFullYear();
-                df[year] = (df[year] || 0) + item.amount;
-            });
-
-            const last5YearsData = Object.entries(df).sort((a, b) => b[0] - a[0]).slice(0, 5).reverse();
-            
-            const labels = last5YearsData.map(d => d[0]);
-            const data = last5YearsData.map(d => d[1]);
-
-            container.innerHTML = `<div class="card card-body"><div class="chart-container" style="height: 150px;"><canvas id="chart-${symbol}"></canvas></div></div>`;
-            const ctx = document.getElementById(`chart-${symbol}`).getContext('2d');
-            
-            activeDetailChart = new Chart(ctx, {
-                type: 'bar',
-                data: { labels: labels, datasets: [{ label: `${symbol} 연간 배당금 (보정)`, data: data, backgroundColor: 'rgba(13, 110, 253, 0.6)' }] },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: false }, tooltip: { callbacks: { label: (c) => `총액: $${c.parsed.y.toFixed(4)}` } } }, scales: { y: { beginAtZero: true, ticks: { callback: (v) => `$${v.toFixed(2)}` } } } }
-            });
-        }
+        // 이벤트 리스너 초기화
+        initializeEventListeners();
     });
-});
+
+    /**
+     * 페이지의 모든 이벤트 리스너를 설정합니다.
+     */
+    function initializeEventListeners() {
+        // 세금 토글 스위치
+        const taxToggle = document.getElementById('taxToggleSwitch');
+        taxToggle.addEventListener('change', (e) => {
+            isTaxApplied = e.target.checked;
+            updateTaxDisplay();
+        });
+
+        // 월별 상세 정보 닫기 버튼
+        const closeMonthlyDetailBtn = document.getElementById('closeMonthlyDetail');
+        closeMonthlyDetailBtn.addEventListener('click', () => {
+            document.getElementById('monthlyDetail').classList.add('d-none');
+        });
+
+        // 종목 카드 클릭 이벤트 (배당 성장률 차트 토글)
+        document.querySelectorAll('.stock-card-interactive').forEach(card => {
+            card.addEventListener('click', function() {
+                const symbol = this.dataset.symbol;
+                const historyData = JSON.parse(this.dataset.history);
+                toggleDividendHistoryChart(symbol, historyData);
+            });
+        });
+    }
+
+    /**
+     * 세금 적용 여부에 따라 화면의 모든 금액 표시를 업데이트합니다.
+     */
+    function updateTaxDisplay() {
+        const taxMultiplier = isTaxApplied ? (1 - taxRate) : 1;
+        document.querySelectorAll('.tax-value').forEach(el => {
+            const pretaxValue = parseFloat(el.dataset.pretaxValue);
+            const valueToShow = pretaxValue * taxMultiplier;
+            el.textContent = `$${valueToShow.toFixed(2)}`;
+        });
+        document.getElementById('taxToggleLabel').textContent = isTaxApplied ? '세후' : '세전';
+    }
+
+    /**
+     * 특정 월의 상세 배당 내역을 표시합니다.
+     * @param {number} monthIndex - 월 인덱스 (0-11)
+     */
+    function displayMonthlyDetail(monthIndex) {
+        const detailContainer = document.getElementById('monthlyDetail');
+        const detailTitle = document.getElementById('monthlyDetailTitle');
+        const detailContent = document.getElementById('monthlyDetailContent');
+
+        const monthName = monthlyData.labels[monthIndex];
+        const items = monthlyData.detailed_data[monthIndex];
+        const totalAmount = items.reduce((sum, item) => sum + item.amount, 0);
+
+        detailTitle.textContent = `${monthName} 배당 상세 내역 (총: $${totalAmount.toFixed(2)})`;
+        detailContent.innerHTML = '';
+
+        if (items.length > 0) {
+            items.sort((a, b) => b.amount - a.amount);
+            items.forEach(item => {
+                const itemHtml = `
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong class="me-2">${item.symbol}</strong>
+                            <small class="text-muted">(${item.quantity}주, 주당 $${item.dps_per_payout.toFixed(4)})</small>
+                            <br>
+                            <small class="text-muted">예측 배당락일: ${item.ex_dividend_date}</small>
+                        </div>
+                        <span class="badge bg-success rounded-pill fs-6">$${item.amount.toFixed(2)}</span>
+                    </div>`;
+                detailContent.insertAdjacentHTML('beforeend', itemHtml);
+            });
+        } else {
+            detailContent.innerHTML = '<p class="text-muted text-center m-0">해당 월의 배당 정보가 없습니다.</p>';
+        }
+
+        detailContainer.classList.remove('d-none');
+    }
+
+    /**
+     * 종목별 배당금 비중을 보여주는 도넛 차트를 생성합니다.
+     * @param {string} canvasId - 캔버스 요소의 ID
+     * @param {Array} data - 차트 데이터
+     */
+    function createDividendAllocationChart(canvasId, data) {
+        const ctx = document.getElementById(canvasId)?.getContext('2d');
+        if (!ctx) return;
+
+        // 차트가 이미 생성되었다면 파괴
+        if (Chart.getChart(canvasId)) {
+            Chart.getChart(canvasId).destroy();
+        }
+
+        const labels = data.map(d => d.symbol);
+        const values = data.map(d => d.value);
+
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997', '#6610f2', '#6c757d'],
+                    borderColor: '#343a40',
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right' },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => {
+                                const total = context.chart.getData().datasets[0].data.reduce((a, b) => a + b, 0);
+                                const percentage = (context.parsed / total * 100).toFixed(2);
+                                return ` ${context.label}: $${context.parsed.toFixed(2)} (${percentage}%)`;
+                            }
+                        }
+                    },
+                    datalabels: { display: false }
+                }
+            }
+        });
+    }
+    
+    /**
+     * 종목별 과거 배당금 이력 차트를 토글합니다.
+     * @param {string} symbol - 종목 심볼
+     * @param {Array} historyData - 배당 이력 데이터
+     */
+    function toggleDividendHistoryChart(symbol, historyData) {
+        const detailContainer = document.getElementById(`detail-${symbol}`);
+        const isCollapsed = detailContainer.classList.contains('collapse');
+
+        if (isCollapsed) {
+            // 차트 생성
+            if (historyData && historyData.length > 0) {
+                const years = {};
+                historyData.forEach(item => {
+                    const year = item.date.substring(0, 4);
+                    years[year] = (years[year] || 0) + item.amount;
+                });
+
+                const labels = Object.keys(years).sort();
+                const data = labels.map(year => years[year]);
+
+                const canvas = document.createElement('canvas');
+                detailContainer.innerHTML = '';
+                detailContainer.appendChild(canvas);
+                new Chart(canvas.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: '연간 주당 배당금 (보정됨)',
+                            data: data,
+                            backgroundColor: 'rgba(25, 135, 84, 0.5)',
+                            borderColor: 'rgba(25, 135, 84, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, ticks: { callback: value => '$' + value.toFixed(2) } } }
+                    }
+                });
+            } else {
+                detailContainer.innerHTML = '<p class="text-center text-muted p-3">배당 이력 데이터가 없습니다.</p>';
+            }
+        }
+        
+        // 부트스트랩의 Collapse 인스턴스를 사용하여 토글
+        const collapse = bootstrap.Collapse.getOrCreateInstance(detailContainer);
+        collapse.toggle();
+    }
+});```
