@@ -69,20 +69,22 @@
 {% endif %}
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/charts.js') }}" defer></script>
+{# 🛠️ 버그 수정: defer 속성을 제거하여 스크립트 실행 순서를 보장 #}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    // 🛠️ 버그 수정: 필요한 플러그인을 명시적으로 요청하고, 로드가 완료되면 차트 생성
     window.ChartUtils.requestPlugins(['datalabels', 'treemap'], () => {
-        // 이 콜백은 datalabels와 treemap 플러그인이 모두 로드된 후 실행됩니다.
-        
-        // 플러그인 등록
         Chart.register(ChartDataLabels, ChartJsChartTreemap.TreemapController, ChartJsChartTreemap.TreemapElement);
 
         const monthlyData = {{ monthly_dividend_data|tojson }};
         if (monthlyData && monthlyData.datasets && monthlyData.datasets[0].data.some(d => d > 0)) {
-            createMonthlyDividendChart('monthlyDividendChart', monthlyData);
+            // 🛠️ 안정성 강화: 함수 존재 여부 확인
+            if(typeof createMonthlyDividendChart === 'function') {
+                createMonthlyDividendChart('monthlyDividendChart', monthlyData);
+            } else {
+                console.error('createMonthlyDividendChart is not defined.');
+            }
         }
 
         const sectorData = {{ sector_allocation|tojson }};
@@ -101,7 +103,6 @@ document.addEventListener('DOMContentLoaded', function () {
                                 if (context.raw) {
                                     const item = context.raw;
                                     const percentage = (item.v / totalPortfolioValue * 100).toFixed(1);
-                                    // 너비가 좁을 경우 줄바꿈 대신 한 줄로 표시
                                     if (context.width < 100) {
                                         return `${item.g} (${percentage}%)`;
                                     }
