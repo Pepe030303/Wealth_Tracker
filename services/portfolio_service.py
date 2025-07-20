@@ -123,6 +123,7 @@ def get_portfolio_allocation_data(user_id):
     price_data_map = stock_api.get_stock_prices_bulk(symbols)
     
     allocation_data = []
+    total_value = 0
     for h in holdings:
         price_data = price_data_map.get(h.symbol)
         current_price = price_data['price'] if price_data else h.purchase_price
@@ -131,7 +132,15 @@ def get_portfolio_allocation_data(user_id):
             'symbol': h.symbol,
             'value': current_value,
         })
-    
+        total_value += current_value
+
+    if total_value > 0:
+        for item in allocation_data:
+            item['percentage'] = (item['value'] / total_value) * 100
+    else:
+        for item in allocation_data:
+            item['percentage'] = 0
+
     # 평가금액 기준으로 내림차순 정렬
     allocation_data.sort(key=lambda x: x['value'], reverse=True)
     return allocation_data
