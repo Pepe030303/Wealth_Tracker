@@ -5,7 +5,6 @@
 {% block title %}배당금 분석 - Wealth Tracker{% endblock %}
 
 {% block content %}
-{# 🛠️ 변경: 데이터 속성을 컨테이너 요소로 옮김 #}
 <div id="dividendAnalysisContainer"
      data-allocation-data="{{ get_dividend_allocation_data(dividend_metrics)|tojson }}"
      data-monthly-data="{{ monthly_dividend_data|tojson }}"
@@ -144,7 +143,7 @@
 {% endblock %}
 
 {% block scripts %}
-{# 🛠️ 변경: 인라인 스크립트를 외부 파일로 분리 #}
-<script src="{{ url_for('static', filename='js/charts.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/dividend-analysis.js') }}" defer></script>
+{# 🛠️ 버그 수정: defer 속성을 제거하여 스크립트 실행 순서를 보장 #}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dividend-analysis.js') }}"></script>
 {% endblock %}
