@@ -27,7 +27,7 @@ def login():
         if user and user.check_password(request.form.get('password')):
             login_user(user, remember=True)
             return redirect(url_for('main.dashboard'))
-        flash('아이디 또는 비밀번호가 올바르지 않습니다.', 'error')
+        flash('아이디 또는 비밀번호가 올르지 않습니다.', 'error')
     return render_template('login.html')
 
 @main_bp.route('/logout')
@@ -68,7 +68,7 @@ def dashboard():
 def dividends():
     portfolio_data = get_portfolio_analysis_data(current_user.id)
     if not portfolio_data:
-        return render_template('dividends.html', dividend_metrics=[])
+        return render_template('dividends.html', dividend_metrics=[], monthly_dividend_data={}, get_dividend_allocation_data=get_dividend_allocation_data, tax_rate=app.config.get('TAX_RATE', 0.154))
     
     return render_template('dividends.html',
                            dividend_metrics=portfolio_data['dividend_metrics'],
@@ -80,7 +80,15 @@ def dividends():
 @main_bp.route('/allocation')
 @login_required
 def allocation():
+    """포트폴리오 비중 페이지 라우트"""
     allocation_data = get_portfolio_allocation_data(current_user.id)
+    # 🛠️ 변경: profile 데이터도 함께 전달하도록 수정
+    symbols = [item['symbol'] for item in allocation_data]
+    profiles = stock_api.get_stock_profiles_bulk(symbols)
+    
+    for item in allocation_data:
+        item['profile'] = profiles.get(item['symbol'], {})
+
     return render_template('allocation.html', allocation_data=allocation_data)
 
 @main_bp.route('/holdings')
