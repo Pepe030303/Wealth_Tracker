@@ -23,7 +23,6 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///investment.db")
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_recycle": 280, "pool_pre_ping": True}
 
-# 🛠️ Feature: JS에서 하드코딩된 세율을 관리하기 위해 서버 설정으로 추가
 app.config["TAX_RATE"] = 0.154
 
 task_queue = None
@@ -65,8 +64,9 @@ with app.app_context():
     db.create_all()
     from stock_api import load_us_stocks_data
     load_us_stocks_data()
-    from utils import load_manual_overrides
-    load_manual_overrides()
+    # 🛠️ 제거: 수동 재정의 파일 로딩 함수 호출 제거
+    # from utils import load_manual_overrides
+    # load_manual_overrides()
 
 from routes import main_bp
 app.register_blueprint(main_bp)
