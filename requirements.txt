@@ -11,3 +11,4 @@ pandas
 rq
 redis
 nasdaq-data-link
+whitenoise  # 🛠️ 추가: 프로덕션 환경에서 정적 파일을 제공하기 위한 라이브러리
