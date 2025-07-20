@@ -1,18 +1,17 @@
 /* 📄 static/js/charts.js */
-// 🛠️ 버그 수정: 비어있던 파일에 공통 차트 생성 함수 로직 추가
+// 🛠️ 버그 수정: 비어있던 파일에 공통 차트 생성 함수 로직 복구
 
 /**
  * 월별 배당금 막대 차트를 생성하고 지정된 캔버스에 렌더링합니다.
  * @param {string} canvasId - 차트를 렌더링할 캔버스 요소의 ID
  * @param {object} monthlyData - 차트 데이터 (labels, datasets, detailed_data 포함)
  * @param {object} [options={}] - 추가 차트 옵션 (예: onClick 핸들러)
- * @returns {Chart} 생성된 Chart.js 인스턴스
+ * @returns {Chart|null} 생성된 Chart.js 인스턴스 또는 실패 시 null
  */
 function createMonthlyDividendChart(canvasId, monthlyData, options = {}) {
     const ctx = document.getElementById(canvasId)?.getContext('2d');
     if (!ctx) return null;
 
-    // 차트가 이미 존재하면 파괴하여 중복 생성을 방지
     if (Chart.getChart(canvasId)) {
         Chart.getChart(canvasId).destroy();
     }
@@ -29,7 +28,9 @@ function createMonthlyDividendChart(canvasId, monthlyData, options = {}) {
                 borderWidth: 1,
                 borderRadius: 5,
                 barThickness: 'flex',
-                maxBarThickness: 50
+                maxBarThickness: 50,
+                // 활성(클릭된) 막대의 색상을 더 진하게 설정
+                hoverBackgroundColor: 'rgba(25, 135, 84, 0.9)',
             }]
         },
         options: {
@@ -51,7 +52,7 @@ function createMonthlyDividendChart(canvasId, monthlyData, options = {}) {
                 datalabels: {
                     anchor: 'end',
                     align: 'end',
-                    formatter: (value) => value > 0 ? '$' + value.toFixed(0) : '',
+                    formatter: (value) => value > 0 ? '$' + Math.round(value) : '',
                     color: '#adb5bd',
                     font: { weight: 'bold' }
                 }
