@@ -1,5 +1,4 @@
 {# 📄 templates/dashboard.html #}
-
 {% extends "base.html" %}
 {% block title %}대시보드 - Wealth Tracker{% endblock %}
 {% block content %}
@@ -10,24 +9,24 @@
 {% if summary.total_investment %}
 <div class="row">
     <!-- Summary Cards -->
-    <div class="col-md-4 mb-4">
-        <div class="card h-100">
+    <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card h-100 shadow-sm">
             <div class="card-body">
                 <h6 class="card-subtitle mb-2 text-muted">총 평가금액</h6>
                 <h3 class="card-title fw-bold">${{ "%.2f"|format(summary.total_current_value) }}</h3>
             </div>
         </div>
     </div>
-    <div class="col-md-4 mb-4">
-        <div class="card h-100">
+    <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card h-100 shadow-sm">
             <div class="card-body">
                 <h6 class="card-subtitle mb-2 text-muted">총 투자원금</h6>
                 <h3 class="card-title">${{ "%.2f"|format(summary.total_investment) }}</h3>
             </div>
         </div>
     </div>
-    <div class="col-md-4 mb-4">
-        <div class="card h-100 {% if summary.total_profit_loss >= 0 %}border-success{% else %}border-danger{% endif %}">
+    <div class="col-lg-4 col-md-12 mb-4">
+        <div class="card h-100 shadow-sm {% if summary.total_profit_loss >= 0 %}border-success{% else %}border-danger{% endif %}">
             <div class="card-body">
                 <h6 class="card-subtitle mb-2 text-muted">총 손익 (수익률)</h6>
                 <h3 class="card-title fw-bold {% if summary.total_profit_loss >= 0 %}text-success{% else %}text-danger{% endif %}">
@@ -43,7 +42,7 @@
 
 <div class="row">
     <div class="col-lg-7 mb-4">
-        <div class="card h-100">
+        <div class="card h-100 shadow-sm">
             <div class="card-header"><h5 class="card-title mb-0">월별 배당금 현황</h5></div>
             <div class="card-body">
                 <div class="chart-container" style="height: 300px;">
@@ -53,7 +52,7 @@
         </div>
     </div>
     <div class="col-lg-5 mb-4">
-        <div class="card h-100">
+        <div class="card h-100 shadow-sm">
             <div class="card-header"><h5 class="card-title mb-0">섹터 비중</h5></div>
             <div class="card-body d-flex align-items-center justify-content-center p-2">
                 {% if sector_allocation %}<canvas id="sectorAllocationChart"></canvas>{% else %}<p class="text-muted m-0">데이터가 없습니다.</p>{% endif %}
@@ -72,7 +71,7 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/charts.js') }}" defer></script>
 
-<script defer>
+<script>
 document.addEventListener('DOMContentLoaded', function () {
     // 🛠️ 버그 수정: 필요한 플러그인을 명시적으로 요청하고, 로드가 완료되면 차트 생성
     window.ChartUtils.requestPlugins(['datalabels', 'treemap'], () => {
@@ -82,7 +81,7 @@ document.addEventListener('DOMContentLoaded', function () {
         Chart.register(ChartDataLabels, ChartJsChartTreemap.TreemapController, ChartJsChartTreemap.TreemapElement);
 
         const monthlyData = {{ monthly_dividend_data|tojson }};
-        if (monthlyData) {
+        if (monthlyData && monthlyData.datasets && monthlyData.datasets[0].data.some(d => d > 0)) {
             createMonthlyDividendChart('monthlyDividendChart', monthlyData);
         }
 
@@ -96,12 +95,16 @@ document.addEventListener('DOMContentLoaded', function () {
                     datasets: [{
                         tree: sectorData, key: 'value', groups: ['sector'], 
                         labels: {
-                            display: true, color: 'white', font: { size: 16, weight: 'bold' },
+                            display: true, color: 'white', font: { size: 14, weight: 'bold' },
                             textStrokeColor: 'rgba(0,0,0,0.6)', textStrokeWidth: 2,
                             formatter(context) {
                                 if (context.raw) {
                                     const item = context.raw;
                                     const percentage = (item.v / totalPortfolioValue * 100).toFixed(1);
+                                    // 너비가 좁을 경우 줄바꿈 대신 한 줄로 표시
+                                    if (context.width < 100) {
+                                        return `${item.g} (${percentage}%)`;
+                                    }
                                     return [item.g, `$${item.v.toFixed(0)}`, `(${percentage}%)`];
                                 }
                                 return null;
@@ -133,7 +136,8 @@ document.addEventListener('DOMContentLoaded', function () {
                             }
                         },
                         datalabels: { display: true }
-                    } 
+                    },
+                    maintainAspectRatio: false
                 }
             });
         }
