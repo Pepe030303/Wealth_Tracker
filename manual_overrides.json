@@ -1,7 +1,0 @@
-# 📄 manual_overrides.json
-{
-  "TLT": {
-    "comment": "Data from yfinance for TLT is often unstable. This is a manual override.",
-    "trailingAnnualDividendRate": 3.85
-  }
-}
